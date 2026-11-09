@@ -113,6 +113,7 @@ async function main() {
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
+    await c.query(`SET LOCAL app.audit_off = 'on'`); // demo data is not a change anyone made
     const already = (await c.query('SELECT COUNT(*)::int n FROM users')).rows[0].n;
     if (already > 0) throw new Error('Database already has data. Run "npm run db:reset" to start fresh.');
 
@@ -251,8 +252,14 @@ async function main() {
       [8, 'Finance Team', 'finance@freshmakers.in', 'FINANCE', null, null, []],
       [9, 'Dairy Fresh (Vendor)', 'vendor@freshmakers.in', 'VENDOR', null, 1, []],
     ];
+    const linked = new Set<number>();
     await ins(c, 'users', ['id', 'name', 'email', 'password_hash', 'role', 'region_id', 'vendor_id', 'employee_id'],
-      users.map((u) => [u[0], u[1], u[2], hash, u[3], u[4], u[5], null]));
+      users.map((u) => {
+        // site staff get a linked employee so "My attendance" works out of the box
+        const emp = empSite.find((e) => u[6].includes(e.site) && !linked.has(e.id));
+        if (emp) linked.add(emp.id);
+        return [u[0], u[1], u[2], hash, u[3], u[4], u[5], emp?.id ?? null];
+      }));
     await ins(c, 'user_sites', ['user_id', 'site_id'], users.flatMap((u) => u[6].map((s) => [u[0], s])));
     const BARISTA = 2, MANAGER = 3, SUPERVISOR = 4, OPS = 5, CBO = 6, SCM = 7, FIN = 8;
 

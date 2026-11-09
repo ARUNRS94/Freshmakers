@@ -62,10 +62,24 @@ Production: `npm run build && npm start`. One Node process serves the API and th
 - **Safeguards**: no negative stock, no future-dated consumption, indents cannot have past required dates, overpayment checks, audit log, login throttling
 - **Phone-first design**: bottom tab bar per role, tables turn into cards on phones, filters collapse, dialogs become bottom sheets, dark mode
 
+## Masters import and export
+*Setup → Masters* lists every master with **Template**, **Export**, **Import** and **Manage** actions. Files are CSV (opens in Excel; save as "CSV UTF-8").
+- Import upserts on the natural key (code, or vendor/customer + item + effective date for rates). Blank cells keep the current value on existing records.
+- Every import is previewed first and is all-or-nothing: one bad row means nothing is saved.
+- Import in dependency order: Regions → Customers → Sites; Items and Vendors → rates. Rows starting with `#` are ignored, so template hint and example rows are safe to leave in.
+- Import and export follow the role access table. Users and deployments are not included.
+
+## Roles, access and audit
+- *Setup → Users, roles & access* manages logins, custom roles and a View / Edit table per role. The server enforces the table on every request. Admin always has full access, and only an admin can change role access.
+- Built-in role codes still drive workflow (indent approval stages, SCM fulfilment). Custom roles get permissions and a data scope (all sites, region or assigned sites) but are not approval stages.
+- *Setup → Audit log* shows every create, update and delete with who, when, and before/after values. Database triggers record it, covering every table except the stock ledger (derived from audited documents) and document counters; the log itself cannot be edited.
+- Upgrade an existing database with `npm --prefix server run db:migrate`. It only adds to the schema and keeps your data.
+
+
 ## Key business rules
 - **Approval chain** (default Manager → Supervisor → Ops Head → CBO): stages at or below the raiser's role are skipped. Approvers can reduce quantities, reject (a reason is required) or send back to draft. After the last stage the indent goes to SCM, who fulfils it by warehouse dispatch, local purchase or a PO delivered directly to the site. Status moves to Partial or Fulfilled automatically.
 - **Stock** is the sum of `stock_ledger` movements: OPENING, GRN, LOCAL_PURCHASE, DISPATCH_OUT/IN, CONSUMPTION, WASTAGE, ADJUSTMENT, TRANSFER_OUT/IN.
 - **Client billing** uses the client-specific rate on the dispatch date. If there is none, MRP is used for MRP goods and the standard sell rate otherwise.
 
 ## API overview (all under `/api`, JWT bearer auth)
-`auth/login`, `auth/me` · `lookups` · CRUD: `regions`, `clients`, `sites`, `warehouses`, `items`, `vendors`, `vendor-rates`, `client-rates`, `employees`, `deployments`, `users`, `site-item-settings`, `settings` · `stock`, `stock/ledger`, `consumption(/sheet)`, `stock-counts`, `transfers`, `planner` · `indents` (+ `/:id/submit|approve|reject|send-back|cancel|close`) · `purchase-orders` (+ `/:id/grn|ack|cancel|close`) · `local-purchases` · `dispatches` (+ `/:id/receive|cancel`) · `finance/vendor-bills|vendor-payments|client-invoices|client-receipts|ageing` · `attendance(/sheet|/summary)`, `deployment-gaps` · `dashboard`, `alerts`, `reports/:key`
+`auth/login`, `auth/me` · `lookups` · CRUD: `regions`, `clients`, `sites`, `warehouses`, `items`, `vendors`, `vendor-rates`, `client-rates`, `employees`, `deployments`, `users`, `site-item-settings`, `settings` · `stock`, `stock/ledger`, `consumption(/sheet)`, `stock-counts`, `transfers`, `planner` · `indents` (+ `/:id/submit|approve|reject|send-back|cancel|close`) · `purchase-orders` (+ `/:id/grn|ack|cancel|close`) · `local-purchases` · `dispatches` (+ `/:id/receive|cancel`) · `finance/vendor-bills|vendor-payments|client-invoices|client-receipts|ageing` · `attendance(/sheet|/summary)`, `deployment-gaps` · `dashboard`, `alerts`, `reports/:key` · `master-data` (+ `/:key/template|export|import`)

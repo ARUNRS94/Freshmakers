@@ -79,7 +79,7 @@ export default function DispatchForm() {
           <LineItems lines={lines} onChange={setLines} categories={['SUPPLY', 'MRP']} qtyLabel="Dispatch qty"
             rateHint={(id) => { const w = wh[id]; return w ? `Warehouse stock ${qty(w.qty, w.uom)}` : undefined; }} />
           <div className="row gap" style={{ justifyContent: 'flex-end' }}>
-            <span className="muted small grow">Approx. cost value {money(value)} · billed to client at agreed rates on receipt</span>
+            <span className="muted small grow">Approx. cost value {money(value)} · billed to customer at agreed rates on receipt</span>
             <button className="btn" disabled={busy} onClick={save}>{busy ? 'Dispatching…' : 'Dispatch'}</button>
           </div>
         </div>

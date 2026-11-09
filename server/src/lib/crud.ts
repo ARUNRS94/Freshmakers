@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { q, one, pool, Where } from './db.js';
-import { allow, type Role } from './auth.js';
+import { q, one, Where } from './db.js';
+import { need } from './auth.js';
+import type { ModuleKey } from './access.js';
 import { bad, notFound } from './http.js';
-import { audit } from './stock.js';
 
 export interface CrudConfig {
   table: string;
@@ -15,7 +15,8 @@ export interface CrudConfig {
   /** query-string filters mapped to column expressions */
   filters?: Record<string, string>;
   orderBy?: string;
-  writeRoles: Role[];
+  /** access module that controls changes */
+  module: ModuleKey;
   /** restrict list to user's sites using this column expression */
   siteColumn?: string;
 }
@@ -61,17 +62,16 @@ export function crudRouter(cfg: CrudConfig) {
     return { cols, vals };
   };
 
-  r.post('/', allow(...cfg.writeRoles), async (req, res) => {
+  r.post('/', need(cfg.module), async (req, res) => {
     const { cols, vals } = pick(req.body, false);
     const row = await one(
       `INSERT INTO ${cfg.table}(${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')}) RETURNING *`,
       vals,
     );
-    await audit(pool, req.user.id, 'CREATE', cfg.table, row.id);
     res.status(201).json(row);
   });
 
-  r.put('/:id', allow(...cfg.writeRoles), async (req, res) => {
+  r.put('/:id', need(cfg.module), async (req, res) => {
     const { cols, vals } = pick(req.body, true);
     const row = await one(
       `UPDATE ${cfg.table} SET ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} WHERE id=$${cols.length + 1} RETURNING *`,
@@ -81,7 +81,7 @@ export function crudRouter(cfg: CrudConfig) {
     res.json(row);
   });
 
-  r.delete('/:id', allow(...cfg.writeRoles), async (req, res) => {
+  r.delete('/:id', need(cfg.module), async (req, res) => {
     // soft delete where an active flag exists, otherwise hard delete
     const hasActive = await one(
       `SELECT 1 FROM information_schema.columns WHERE table_name=$1 AND column_name='active'`,

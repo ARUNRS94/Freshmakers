@@ -6,7 +6,7 @@ import { Card, ErrorBox, PageHeader } from '../components/ui';
 import { SliceBar, defaultRange, type Slicer } from '../components/Filters';
 import { DataTable, type Column } from '../components/DataTable';
 
-const DIM_LABEL: Record<string, string> = { d: 'Date', month: 'Month', region: 'Region', client: 'Company', site: 'Site', item: 'Item', category: 'Goods type', vendor: 'Vendor', status: 'Status', employee: 'Employee' };
+const DIM_LABEL: Record<string, string> = { d: 'Date', month: 'Month', region: 'Region', client: 'Customer', site: 'Site', item: 'Item', category: 'Goods type', vendor: 'Vendor', status: 'Status', employee: 'Employee' };
 const MONEY = /value|amount|billed|paid|balance|overdue|received|margin$|rate/;
 const label = (k: string) => k.replace(/_/g, ' ').replace(/pct$/, '%').replace(/^./, (c) => c.toUpperCase());
 const dimKey = (g: string) => (g === 'd' ? 'date' : g);

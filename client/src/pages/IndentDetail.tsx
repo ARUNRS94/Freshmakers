@@ -11,7 +11,7 @@ export default function IndentDetail() {
   const { id } = useParams();
   const nav = useNavigate();
   const toast = useToast();
-  const { user, can } = useAuth();
+  const { user, isRole } = useAuth();
   const { data: d, loading, error, reload } = useApi<any>(`/indents/${id}`);
   const [approved, setApproved] = useState<Record<number, string>>({});
   const [dialog, setDialog] = useState<null | 'reject' | 'send-back' | 'cancel' | 'close'>(null);
@@ -41,7 +41,7 @@ export default function IndentDetail() {
   const stages: string[] = d.chain;
   const doneStages = new Set(d.approvals.filter((a: any) => a.action === 'APPROVE').map((a: any) => a.stage));
   const isOpen = ['APPROVED', 'PARTIAL'].includes(d.status);
-  const canCancel = ['DRAFT', 'PENDING', 'APPROVED'].includes(d.status) && (d.created_by === user?.id || can('SUPERVISOR', 'OPS_HEAD', 'CBO', 'SCM'));
+  const canCancel = ['DRAFT', 'PENDING', 'APPROVED'].includes(d.status) && (d.created_by === user?.id || isRole('SUPERVISOR', 'OPS_HEAD', 'CBO', 'SCM'));
 
   return (
     <>
@@ -51,11 +51,11 @@ export default function IndentDetail() {
           {d.status === 'DRAFT' && <button className="btn" disabled={busy} onClick={() => act('submit')}>Submit</button>}
           {d.permissions.canFulfil && <>
             <button className="btn" onClick={() => nav(`/dispatches/new?indent_id=${id}`)}>Dispatch from warehouse</button>
-            <button className="btn btn-ghost" onClick={() => nav(`/local-purchases?new=1&indent_id=${id}&site_id=${d.site_id}`)}>Local purchase</button>
+            <button className="btn btn-ghost" onClick={() => nav(`/local-purchases/new?indent_id=${id}&site_id=${d.site_id}`)}>Local purchase</button>
             <button className="btn btn-ghost" onClick={() => nav(`/purchase-orders/new?indent_id=${id}&site_id=${d.site_id}`)}>Direct PO to site</button>
           </>}
-          {!d.permissions.canFulfil && isOpen && can('MANAGER', 'SUPERVISOR') && (
-            <button className="btn btn-ghost" onClick={() => nav(`/local-purchases?new=1&indent_id=${id}&site_id=${d.site_id}`)}>Buy locally</button>
+          {!d.permissions.canFulfil && isOpen && isRole('MANAGER', 'SUPERVISOR') && (
+            <button className="btn btn-ghost" onClick={() => nav(`/local-purchases/new?indent_id=${id}&site_id=${d.site_id}`)}>Buy locally</button>
           )}
         </>} />
       <ErrorBox>{err}</ErrorBox>
@@ -145,7 +145,7 @@ export default function IndentDetail() {
           </ul>
           <div className="row gap" style={{ marginTop: '1rem' }}>
             {canCancel && <button className="btn btn-ghost btn-sm" onClick={() => setDialog('cancel')}>Cancel indent</button>}
-            {['APPROVED', 'PARTIAL', 'FULFILLED'].includes(d.status) && can('SCM', 'OPS_HEAD') && <button className="btn btn-ghost btn-sm" onClick={() => setDialog('close')}>Close indent</button>}
+            {['APPROVED', 'PARTIAL', 'FULFILLED'].includes(d.status) && isRole('SCM', 'OPS_HEAD') && <button className="btn btn-ghost btn-sm" onClick={() => setDialog('close')}>Close indent</button>}
           </div>
         </Card>
       </div>

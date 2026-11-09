@@ -12,6 +12,7 @@ export const forbidden = (msg = 'You do not have permission for this action') =>
 export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof HttpError) return res.status(err.status).json({ error: err.message, details: err.details });
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Malformed JSON body' });
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'The file is too large' });
   // Postgres errors
   if (err?.code === '23505') return res.status(409).json({ error: 'Duplicate value: ' + (err.detail ?? '') });
   if (err?.code === '23503') return res.status(409).json({ error: 'Linked record missing or record is in use: ' + (err.detail ?? '') });

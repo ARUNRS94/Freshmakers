@@ -8,7 +8,7 @@ import { DataTable } from '../components/DataTable';
 import { useAuth } from '../lib/auth';
 
 export default function Planner() {
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const toast = useToast();
   const [f, set] = useQueryState({ for_date: addDays(today(), 1), cover_days: '1', only_short: 'true' });
   const { data, loading, reload } = useApi<any>(`/planner${qs(f)}`);
@@ -44,7 +44,7 @@ export default function Planner() {
   return (
     <>
       <PageHeader title="Tomorrow’s requirement" subtitle={data ? `Based on the last ${data.lookback_days} days of consumption, current stock, in-transit goods and open indents` : ''}
-        actions={can('MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'SCM') && bySite.size > 0 &&
+        actions={allowed('indents', 'edit') && bySite.size > 0 &&
           <button className="btn" disabled={busy} onClick={raiseIndents}>{busy ? 'Raising…' : `Raise ${bySite.size} indent(s)`}</button>} />
       <SliceBar values={f} set={set} show={['region', 'client', 'site', 'category']} extra={<>
         <label className="row gap small">For <input type="date" className="input" style={{ width: 150 }} min={today()} value={f.for_date} onChange={(e) => set({ for_date: e.target.value })} /></label>

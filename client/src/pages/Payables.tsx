@@ -13,7 +13,7 @@ export function AgeingTable({ type }: { type: 'vendor' | 'client' }) {
   const m = (k: string) => ({ key: k, align: 'right' as const, sum: true, render: (r: any) => money(r[k]) });
   return (
     <DataTable loading={loading} rows={data} exportName={`${type}-ageing`} rowKey={(r) => r.party} columns={[
-      { key: 'party', label: type === 'vendor' ? 'Vendor' : 'Client', primary: true },
+      { key: 'party', label: type === 'vendor' ? 'Vendor' : 'Customer', primary: true },
       { ...m('not_due'), label: 'Not due' }, { ...m('d1_30'), label: '1–30 days' }, { ...m('d31_60'), label: '31–60 days' },
       { ...m('d61_90'), label: '61–90 days' }, { ...m('d90_plus'), label: '90+ days' }, { ...m('total'), label: 'Total' },
     ]} />
@@ -21,7 +21,7 @@ export function AgeingTable({ type }: { type: 'vendor' | 'client' }) {
 }
 
 export default function Payables() {
-  const { can, user } = useAuth();
+  const { allowed, user } = useAuth();
   const toast = useToast();
   const [f, set] = useQueryState({ tab: 'bills', status: 'UNPAID' });
   const bills = useApi<any[]>(f.tab === 'bills' ? `/finance/vendor-bills${qs({ status: f.status === 'ALL' ? undefined : f.status, vendor_id: f.vendor_id, from: f.from, to: f.to })}` : null);
@@ -79,7 +79,7 @@ export default function Payables() {
                 { key: 'paid', label: 'Paid', align: 'right', sum: true, render: (b) => money(b.paid, true) },
                 { key: 'balance', label: 'Balance', align: 'right', sum: true, render: (b) => <strong>{money(b.balance, true)}</strong> },
                 { key: 'status', label: 'Status', render: (b) => <Badge>{b.status}</Badge> },
-                ...(can('FINANCE') ? [{ key: 'act', label: '', render: (b: any) => b.status !== 'PAID' && (
+                ...(allowed('payables', 'edit') ? [{ key: 'act', label: '', render: (b: any) => b.status !== 'PAID' && (
                   <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); setErr(''); setForm({ amount: String(b.balance), mode: 'NEFT', reference: '', pay_date: today() }); setPay(b); }}>Pay</button>) }] : []),
               ]} />
           </Card>

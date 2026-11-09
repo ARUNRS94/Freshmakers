@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { q, tx, Where } from '../lib/db.js';
-import { allow, assertSite, siteFilters } from '../lib/auth.js';
+import { one, q, tx, Where } from '../lib/db.js';
+import { need, assertSite, siteFilters } from '../lib/auth.js';
 import { bad, date, num, must, today, lines } from '../lib/http.js';
 
 const r = Router();
@@ -20,7 +20,53 @@ r.get('/attendance/sheet', async (req, res) => {
      ORDER BY e.name`, [siteId, d]));
 });
 
-r.post('/attendance', allow('MANAGER', 'SUPERVISOR', 'OPS_HEAD'), async (req, res) => {
+/* ---- self service: the employee linked to the signed-in user ---- */
+const nowTime = () => new Date().toTimeString().slice(0, 5);
+
+async function myDeployment(employeeId: number, day: string) {
+  return one<{ site_id: number; site_name: string; shift: string }>(
+    `SELECT d.site_id, s.name site_name, d.shift FROM deployments d JOIN sites s ON s.id=d.site_id
+     WHERE d.employee_id=$1 AND d.from_date<=$2 AND (d.to_date IS NULL OR d.to_date>=$2) ORDER BY d.from_date DESC LIMIT 1`, [employeeId, day]);
+}
+
+r.get('/attendance/me', async (req, res) => {
+  const employeeId = req.user.employee_id;
+  if (!employeeId) return res.json({ linked: false });
+  const month = String(req.query.month ?? today().slice(0, 7));
+  if (!/^\d{4}-\d{2}$/.test(month)) throw bad('month must be YYYY-MM');
+  const [employee, deployment, rows] = await Promise.all([
+    one('SELECT code, name, designation FROM employees WHERE id=$1', [employeeId]),
+    myDeployment(employeeId, today()),
+    q(`SELECT a.att_date, a.status, a.check_in, a.check_out, s.name site_name FROM attendance a LEFT JOIN sites s ON s.id=a.site_id
+       WHERE a.employee_id=$1 AND a.att_date >= $2::date AND a.att_date < ($2::date + INTERVAL '1 month') ORDER BY a.att_date DESC`, [employeeId, month + '-01']),
+  ]);
+  const todayRow = await one('SELECT status, check_in, check_out FROM attendance WHERE employee_id=$1 AND att_date=$2', [employeeId, today()]);
+  res.json({ linked: true, employee, deployment: deployment ?? null, today: todayRow ?? null, rows });
+});
+
+r.post('/attendance/me', need('my_attendance'), async (req, res) => {
+  const employeeId = req.user.employee_id;
+  if (!employeeId) throw bad('Your login is not linked to an employee record. Ask an admin to link it.');
+  const day = today();
+  const action = req.body.action;
+  if (action !== 'in' && action !== 'out') throw bad('action must be in or out');
+  await tx(async (c) => {
+    const row = await one<any>('SELECT id, status, check_in, check_out FROM attendance WHERE employee_id=$1 AND att_date=$2 FOR UPDATE', [employeeId, day], c);
+    if (action === 'in') {
+      if (row) throw bad(row.check_in ? 'You have already checked in today' : `Today is already marked ${row.status}. Ask your manager to correct it.`);
+      const dep = await myDeployment(employeeId, day);
+      if (!dep) throw bad('You are not deployed at a site today. Ask your manager to mark your attendance.');
+      await c.query(`INSERT INTO attendance(employee_id,att_date,site_id,status,check_in,marked_by) VALUES ($1,$2,$3,'P',$4,$5)`, [employeeId, day, dep.site_id, nowTime(), req.user.id]);
+    } else {
+      if (!row?.check_in) throw bad('Check in first');
+      if (row.check_out) throw bad('You have already checked out today');
+      await c.query('UPDATE attendance SET check_out=$2 WHERE id=$1', [row.id, nowTime()]);
+    }
+  });
+  res.json({ ok: true });
+});
+
+r.post('/attendance', need('attendance'), async (req, res) => {
   const siteId = must(num(req.body.site_id), 'site_id');
   const d = must(date(req.body.date), 'date');
   assertSite(req.user, siteId);

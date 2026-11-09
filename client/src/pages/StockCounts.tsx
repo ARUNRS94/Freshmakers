@@ -32,7 +32,7 @@ export default function StockCounts() {
 
 function CountForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const lk = useLookups();
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const toast = useToast();
   const [loc, setLoc] = useState('');
   const [date, setDate] = useState(today());
@@ -77,7 +77,7 @@ function CountForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
       <div className="form-grid">
         <Field label="Location">
           <select className="input" value={loc} onChange={(e) => setLoc(e.target.value)}>
-            {can('SCM') && <optgroup label="Warehouses">{lk?.warehouses.map((w) => <option key={w.id} value={`w${w.id}`}>{w.name}</option>)}</optgroup>}
+            {allowed('stock_counts', 'edit') && <optgroup label="Warehouses">{lk?.warehouses.map((w) => <option key={w.id} value={`w${w.id}`}>{w.name}</option>)}</optgroup>}
             <optgroup label="Sites">{lk?.sites.map((s) => <option key={s.id} value={`s${s.id}`}>{s.name}</option>)}</optgroup>
           </select>
         </Field>

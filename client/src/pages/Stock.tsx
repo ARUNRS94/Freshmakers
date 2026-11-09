@@ -7,10 +7,10 @@ import { DataTable } from '../components/DataTable';
 import { useAuth } from '../lib/auth';
 
 export default function Stock() {
-  const { can } = useAuth();
+  const { isRole } = useAuth();
   const [f, set] = useQueryState({ tab: 'site' });
   const tab = f.tab as 'site' | 'warehouse' | 'ledger';
-  const canWh = can('SCM', 'CBO');
+  const canWh = isRole('SCM', 'CBO');
   return (
     <>
       <PageHeader title="Stock" subtitle="Real-time inventory from the stock ledger" />

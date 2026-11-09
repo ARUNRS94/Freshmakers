@@ -54,6 +54,34 @@ export function useLookups() {
   return data;
 }
 
+const SITE_KEY = 'fm_site';
+
+function storedSite() {
+  try {
+    return localStorage.getItem(SITE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** The site to enter data for: `override` if given, else the last one chosen, else the user's first site */
+export function useSite(override?: string) {
+  const lk = useLookups();
+  const [picked, setPicked] = useState(storedSite);
+  const sites = lk?.sites ?? [];
+  const known = sites.some((s) => String(s.id) === picked);
+  const siteId = override || (known ? picked : sites.length ? String(sites[0].id) : '');
+  const choose = useCallback((id: string) => {
+    setPicked(id);
+    try {
+      localStorage.setItem(SITE_KEY, id);
+    } catch {
+      /* storage unavailable: the choice lasts until reload */
+    }
+  }, []);
+  return [siteId, choose] as const;
+}
+
 /** State mirrored into the URL query string (so filters survive refresh and links work) */
 export function useQueryState(defaults: Record<string, string> = {}) {
   const [sp, setSp] = useSearchParams();

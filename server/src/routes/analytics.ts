@@ -333,7 +333,7 @@ const REPORTS: Record<string, ReportDef> = {
     measures: { qty: 'SUM(qty)', billed: 'SUM(billed)', paid: 'SUM(paid)', balance: 'SUM(balance)', overdue: 'SUM(overdue)' },
   },
   client_receivables: {
-    label: 'Client billing & receivables',
+    label: 'Customer billing & receivables',
     sql: `SELECT x.invoice_date d, ${SITE_DIMS}, x.status::text status, x.amount+x.tax_amount billed, x.received, x.balance,
                  CASE WHEN x.status<>'PAID' AND x.due_date<CURRENT_DATE THEN x.balance ELSE 0 END overdue, x.id invoice_id
           FROM v_client_invoice_status x ${SITE_JOIN.replace(/X\./g, 'x.')} {where}`,

@@ -5,7 +5,7 @@ import { Card, Empty, Icon, PageHeader, Spinner, Tabs } from '../components/ui';
 
 const TYPE_LABEL: Record<string, string> = {
   ACTION: 'Action needed', REORDER: 'Site reorder', WH_REORDER: 'Warehouse reorder', INDENT_OVERDUE: 'Overdue indents', DISPATCH_PENDING: 'Unacknowledged dispatch',
-  CONSUMPTION_MISSING: 'Missing consumption', PO_LATE: 'Late PO', EXPIRY: 'Expiry', VENDOR_DUE: 'Vendor payments', CLIENT_OVERDUE: 'Client collections', PO_OPEN: 'Open POs',
+  CONSUMPTION_MISSING: 'Missing consumption', PO_LATE: 'Late PO', EXPIRY: 'Expiry', VENDOR_DUE: 'Vendor payments', CLIENT_OVERDUE: 'Customer collections', PO_OPEN: 'Open POs',
 };
 
 export default function Alerts() {

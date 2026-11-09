@@ -45,8 +45,8 @@ export function SliceBar({ values: v, set, show, extra }: Props) {
           </select>
         )}
         {has('client') && (
-          <select className="input" value={v.client_id ?? ''} aria-label="Client" onChange={(e) => set({ client_id: e.target.value, site_id: undefined })}>
-            <option value="">All clients</option>
+          <select className="input" value={v.client_id ?? ''} aria-label="Customer" onChange={(e) => set({ client_id: e.target.value, site_id: undefined })}>
+            <option value="">All customers</option>
             {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         )}

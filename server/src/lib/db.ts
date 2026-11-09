@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import pg from 'pg';
 import 'dotenv/config';
 
@@ -13,7 +14,12 @@ export const pool = new pg.Pool({
 
 export type Db = pg.Pool | pg.PoolClient;
 
+/** The signed-in user for the current request; database triggers read it to attribute audit entries */
+export const actor = new AsyncLocalStorage<{ userId: number }>();
+
 export async function q<T = any>(sql: string, params: unknown[] = [], db: Db = pool): Promise<T[]> {
+  // the user id is set per transaction, so a lone write needs a transaction of its own
+  if (db === pool && actor.getStore() && !/^\s*select\b/i.test(sql)) return tx((c) => q<T>(sql, params, c));
   const r = await db.query(sql, params as any[]);
   return r.rows as T[];
 }
@@ -27,6 +33,8 @@ export async function tx<T>(fn: (c: pg.PoolClient) => Promise<T>): Promise<T> {
   const c = await pool.connect();
   try {
     await c.query('BEGIN');
+    const who = actor.getStore();
+    if (who) await c.query(`SELECT set_config('app.user_id', $1, TRUE)`, [String(who.userId)]);
     const res = await fn(c);
     await c.query('COMMIT');
     return res;

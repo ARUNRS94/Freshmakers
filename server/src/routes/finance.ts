@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { q, one, tx, Where } from '../lib/db.js';
-import { allow, siteFilters } from '../lib/auth.js';
+import { need, siteFilters } from '../lib/auth.js';
 import { bad, date, num, must, today, notFound } from '../lib/http.js';
 import { audit } from '../lib/stock.js';
 
 const r = Router();
 
 /* ----------------------------------------------------------- vendor side */
-r.get('/vendor-bills', allow('FINANCE', 'SCM', 'CBO', 'VENDOR'), async (req, res) => {
+r.get('/vendor-bills', async (req, res) => {
   const w = new Where();
   if (req.user.role === 'VENDOR') w.add('b.vendor_id = ?', req.user.vendor_id ?? -1);
   if (req.query.vendor_id) w.add('b.vendor_id = ?', num(req.query.vendor_id));
@@ -25,7 +25,7 @@ r.get('/vendor-bills', allow('FINANCE', 'SCM', 'CBO', 'VENDOR'), async (req, res
      ${w.sql} ORDER BY (b.status='PAID'), b.due_date, b.id LIMIT 2000`, w.params));
 });
 
-r.get('/vendor-bills/:id', allow('FINANCE', 'SCM', 'CBO', 'VENDOR'), async (req, res) => {
+r.get('/vendor-bills/:id', async (req, res) => {
   const b = await one<any>(`SELECT b.*, v.name vendor_name FROM v_vendor_bill_status b JOIN vendors v ON v.id=b.vendor_id WHERE b.id=$1`, [req.params.id]);
   if (!b || (req.user.role === 'VENDOR' && b.vendor_id !== req.user.vendor_id)) throw notFound('Bill');
   const [ls, pays] = await Promise.all([
@@ -35,7 +35,7 @@ r.get('/vendor-bills/:id', allow('FINANCE', 'SCM', 'CBO', 'VENDOR'), async (req,
   res.json({ ...b, lines: ls, payments: pays });
 });
 
-r.post('/vendor-bills', allow('FINANCE'), async (req, res) => {
+r.post('/vendor-bills', need('payables'), async (req, res) => {
   const vendorId = must(num(req.body.vendor_id), 'Vendor');
   const amount = must(num(req.body.amount), 'Amount');
   const billDate = date(req.body.bill_date) ?? today();
@@ -47,7 +47,7 @@ r.post('/vendor-bills', allow('FINANCE'), async (req, res) => {
   res.status(201).json(row);
 });
 
-r.get('/vendor-payments', allow('FINANCE', 'CBO', 'VENDOR', 'SCM'), async (req, res) => {
+r.get('/vendor-payments', async (req, res) => {
   const w = new Where();
   if (req.user.role === 'VENDOR') w.add('p.vendor_id = ?', req.user.vendor_id ?? -1);
   if (req.query.vendor_id) w.add('p.vendor_id = ?', num(req.query.vendor_id));
@@ -59,7 +59,7 @@ r.get('/vendor-payments', allow('FINANCE', 'CBO', 'VENDOR', 'SCM'), async (req, 
      ORDER BY p.pay_date DESC, p.id DESC LIMIT 2000`, w.params));
 });
 
-r.post('/vendor-payments', allow('FINANCE'), async (req, res) => {
+r.post('/vendor-payments', need('payables'), async (req, res) => {
   const amount = must(num(req.body.amount), 'Amount');
   if (!(amount > 0)) throw bad('Amount must be greater than 0');
   const id = await tx(async (c) => {
@@ -83,7 +83,7 @@ r.post('/vendor-payments', allow('FINANCE'), async (req, res) => {
 });
 
 /* ----------------------------------------------------------- client side */
-r.get('/client-invoices', allow('FINANCE', 'CBO', 'OPS_HEAD'), async (req, res) => {
+r.get('/client-invoices', async (req, res) => {
   const w = new Where();
   siteFilters(req, w, 's');
   const st = req.query.status as string | undefined;
@@ -98,7 +98,7 @@ r.get('/client-invoices', allow('FINANCE', 'CBO', 'OPS_HEAD'), async (req, res) 
      LEFT JOIN dispatches d ON d.id=i.dispatch_id ${w.sql} ORDER BY (i.status='PAID'), i.due_date, i.id LIMIT 2000`, w.params));
 });
 
-r.get('/client-invoices/:id', allow('FINANCE', 'CBO', 'OPS_HEAD'), async (req, res) => {
+r.get('/client-invoices/:id', async (req, res) => {
   const inv = await one<any>(`SELECT i.*, c.name client_name, c.gstin, c.billing_address, s.name site_name FROM v_client_invoice_status i
      JOIN clients c ON c.id=i.client_id LEFT JOIN sites s ON s.id=i.site_id WHERE i.id=$1`, [req.params.id]);
   if (!inv) throw notFound('Invoice');
@@ -109,7 +109,7 @@ r.get('/client-invoices/:id', allow('FINANCE', 'CBO', 'OPS_HEAD'), async (req, r
   res.json({ ...inv, lines: ls, receipts: rec });
 });
 
-r.get('/client-receipts', allow('FINANCE', 'CBO'), async (req, res) => {
+r.get('/client-receipts', async (req, res) => {
   const w = new Where();
   if (req.query.client_id) w.add('r.client_id = ?', num(req.query.client_id));
   if (req.query.from) w.add('r.receipt_date >= ?', date(req.query.from));
@@ -120,7 +120,7 @@ r.get('/client-receipts', allow('FINANCE', 'CBO'), async (req, res) => {
      ORDER BY r.receipt_date DESC, r.id DESC LIMIT 2000`, w.params));
 });
 
-r.post('/client-receipts', allow('FINANCE'), async (req, res) => {
+r.post('/client-receipts', need('receivables'), async (req, res) => {
   const amount = must(num(req.body.amount), 'Amount');
   if (!(amount > 0)) throw bad('Amount must be greater than 0');
   const id = await tx(async (c) => {
@@ -132,7 +132,7 @@ r.post('/client-receipts', allow('FINANCE'), async (req, res) => {
       if (amount > inv.balance + 0.01) throw bad(`Amount exceeds invoice balance of ${inv.balance.toFixed(2)}`);
       clientId = inv.client_id;
     }
-    must(clientId, 'Client');
+    must(clientId, 'Customer');
     const row = await one<any>(
       `INSERT INTO client_receipts(client_id,invoice_id,receipt_date,amount,mode,reference,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [clientId, invId ?? null, date(req.body.receipt_date) ?? today(), amount, req.body.mode ?? 'NEFT', req.body.reference ?? null,
@@ -143,7 +143,7 @@ r.post('/client-receipts', allow('FINANCE'), async (req, res) => {
 });
 
 /* ---------------------------------------------------------------- ageing */
-r.get('/ageing', allow('FINANCE', 'CBO'), async (req, res) => {
+r.get('/ageing', async (req, res) => {
   const type = req.query.type === 'client' ? 'client' : 'vendor';
   const src = type === 'client'
     ? `SELECT c.name party, i.due_date, i.balance FROM v_client_invoice_status i JOIN clients c ON c.id=i.client_id WHERE i.status<>'PAID'`

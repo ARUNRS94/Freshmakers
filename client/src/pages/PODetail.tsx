@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth';
 
 export default function PODetail() {
   const { id } = useParams();
-  const { can, user } = useAuth();
+  const { allowed, user } = useAuth();
   const toast = useToast();
   const { data: d, loading, error, reload } = useApi<any>(`/purchase-orders/${id}`);
   const [grnOpen, setGrnOpen] = useState(false);
@@ -56,9 +56,9 @@ export default function PODetail() {
       <PageHeader back="/purchase-orders" title={<>{d.po_no} <Badge>{d.status}</Badge></>} subtitle={`${d.vendor_name} → ${d.deliver_to}`}
         actions={<>
           {user?.role === 'VENDOR' && !d.vendor_ack && open && <button className="btn" disabled={busy} onClick={() => run(() => api(`/purchase-orders/${id}/ack`, { body: {} }), 'Acknowledged')}>Acknowledge PO</button>}
-          {open && can('SCM', 'MANAGER', 'SUPERVISOR') && <button className="btn" onClick={openGrn}>Receive goods (GRN)</button>}
-          {d.status === 'OPEN' && can('SCM') && <button className="btn btn-ghost" disabled={busy} onClick={() => confirm('Cancel this PO?') && run(() => api(`/purchase-orders/${id}/cancel`, { body: {} }), 'PO cancelled')}>Cancel</button>}
-          {d.status === 'PARTIAL' && can('SCM') && <button className="btn btn-ghost" disabled={busy} onClick={() => confirm('Short-close this PO? Pending quantity will not be received.') && run(() => api(`/purchase-orders/${id}/close`, { body: {} }), 'PO closed')}>Short close</button>}
+          {open && allowed('grn', 'edit') && <button className="btn" onClick={openGrn}>Receive goods (GRN)</button>}
+          {d.status === 'OPEN' && allowed('purchase_orders', 'edit') && <button className="btn btn-ghost" disabled={busy} onClick={() => confirm('Cancel this PO?') && run(() => api(`/purchase-orders/${id}/cancel`, { body: {} }), 'PO cancelled')}>Cancel</button>}
+          {d.status === 'PARTIAL' && allowed('purchase_orders', 'edit') && <button className="btn btn-ghost" disabled={busy} onClick={() => confirm('Short-close this PO? Pending quantity will not be received.') && run(() => api(`/purchase-orders/${id}/close`, { body: {} }), 'PO closed')}>Short close</button>}
         </>} />
       <ErrorBox>{!grnOpen && err}</ErrorBox>
       <Card>

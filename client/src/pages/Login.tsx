@@ -35,10 +35,10 @@ export default function Login() {
             <li>Site-wise stock, daily consumption and next-day requirement</li>
             <li>Indent approvals: Barista → Manager → Supervisor → Ops Head → CBO → SCM</li>
             <li>Purchase orders, GRNs, local purchases and dispatches with rates</li>
-            <li>Vendor payables, client receivables, attendance and deployment</li>
+            <li>Vendor payables, customer receivables, attendance and deployment</li>
           </ul>
         </div>
-        <span style={{ opacity: 0.7, fontSize: '.85rem' }}>46 clients · 168 sites · 5 regions</span>
+        <span style={{ opacity: 0.7, fontSize: '.85rem' }}>46 customers · 168 sites · 5 regions</span>
       </div>
       <div className="login-panel">
         <form className="login-card card card-body" onSubmit={submit}>

@@ -1,14 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, tokenStore } from './api';
 
-export type Role = 'ADMIN' | 'BARISTA' | 'MANAGER' | 'SUPERVISOR' | 'OPS_HEAD' | 'CBO' | 'SCM' | 'VENDOR' | 'FINANCE';
+export type Level = 'view' | 'edit';
 export interface User {
   id: number;
   name: string;
   email: string;
-  role: Role;
+  role: string;
+  role_name: string;
   region_id: number | null;
   vendor_id: number | null;
+  employee_id: number | null;
+  access: Record<string, { view: boolean; edit: boolean }>;
   siteIds: number[] | null;
 }
 
@@ -17,7 +20,10 @@ interface AuthCtx {
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  can: (...roles: Role[]) => boolean;
+  /** what the role access table grants */
+  allowed: (module: string, level?: Level) => boolean;
+  /** for workflow tied to a built-in role, such as approval stages; admins always pass */
+  isRole: (...roles: string[]) => boolean;
 }
 
 const Ctx = createContext<AuthCtx>(null as unknown as AuthCtx);
@@ -49,9 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(r.user);
   };
 
-  const can = useCallback((...roles: Role[]) => !!user && (user.role === 'ADMIN' || roles.includes(user.role)), [user]);
+  const allowed = useCallback((module: string, level: Level = 'view') => !!user && (user.role === 'ADMIN' || !!user.access[module]?.[level]), [user]);
+  const isRole = useCallback((...roles: string[]) => !!user && (user.role === 'ADMIN' || roles.includes(user.role)), [user]);
 
-  return <Ctx.Provider value={{ user, ready, login, logout, can }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, ready, login, logout, allowed, isRole }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

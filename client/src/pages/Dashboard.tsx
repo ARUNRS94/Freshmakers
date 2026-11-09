@@ -1,9 +1,10 @@
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApi, useQueryState } from '../lib/hooks';
 import { qs } from '../lib/api';
 import { money, moneyShort, num, fmtDate } from '../lib/format';
-import { Badge, Card, ErrorBox, Kpi, PageHeader, Spinner, Tabs } from '../components/ui';
+import { Badge, Card, ErrorBox, Icon, Kpi, PageHeader, Spinner, Tabs } from '../components/ui';
+import { QUICK } from '../components/Layout';
 import { SliceBar, defaultRange } from '../components/Filters';
 import { DataTable } from '../components/DataTable';
 import { useAuth } from '../lib/auth';
@@ -28,17 +29,23 @@ function ChartTip({ active, payload, label, fmt }: any) {
 }
 
 export default function Dashboard() {
-  const { user, can } = useAuth();
+  const { user, allowed } = useAuth();
   const nav = useNavigate();
   const [f, set] = useQueryState({ ...defaultRange(30), group: 'region' });
   const { data: d, error, loading } = useApi<any>(`/dashboard${qs({ ...f })}`);
   const byItem = !!f.item_id;
-  const showFinance = can('FINANCE', 'CBO', 'SCM');
+  const showFinance = allowed('payables');
+  const quick = QUICK.filter((i) => allowed(i.module!, i.level));
 
   const kp = d?.kpis;
   return (
     <>
       <PageHeader title={`Hello, ${user?.name.split(' ')[0]}`} subtitle={d ? `${fmtDate(d.from)} – ${fmtDate(d.to)} · ${user?.siteIds ? `${user.siteIds.length} assigned site(s)` : 'All sites'}` : 'Operations overview'} />
+      {quick.length > 0 && (
+        <div className="quick-tiles">
+          {quick.map((i) => <Link key={i.to} to={i.to} className="quick-tile"><Icon name={i.icon} size={22} /> {i.label}</Link>)}
+        </div>
+      )}
       <SliceBar values={f} set={set} show={['region', 'client', 'site', 'category', 'item', 'dates']} />
       <ErrorBox>{error}</ErrorBox>
       {loading && !d ? <Spinner /> : d && (
@@ -50,7 +57,7 @@ export default function Dashboard() {
             <Kpi label="Reorder alerts" value={num(kp.low_stock)} sub="items at / below reorder level" icon="alert" tone={kp.low_stock ? 'amber' : 'green'} to="/stock?stock_status=ALERT" />
             <Kpi label="Open indents" value={num(kp.indents_open)} sub={<>{kp.indents_overdue > 0 && <span className="text-red">{kp.indents_overdue} overdue · </span>}{kp.indents_closed} closed</>} icon="clipboard" tone="amber" to="/indents?status=OPEN" />
             {showFinance && <Kpi label="Vendor payables" value={moneyShort(kp.payables_open)} sub={<span className={kp.payables_overdue > 0 ? 'text-red' : ''}>{moneyShort(kp.payables_overdue)} overdue</span>} icon="rupee" tone="red" to="/finance/payables" />}
-            {can('FINANCE', 'CBO', 'OPS_HEAD') && <Kpi label="Client receivables" value={moneyShort(kp.receivables_open)} sub={`${moneyShort(kp.receivables_overdue)} overdue`} icon="file" tone="blue" to="/finance/receivables" />}
+            {allowed('receivables') && <Kpi label="Customer receivables" value={moneyShort(kp.receivables_open)} sub={`${moneyShort(kp.receivables_overdue)} overdue`} icon="file" tone="blue" to="/finance/receivables" />}
             <Kpi label="Staff present today" value={`${kp.staff_present}/${kp.staff_deployed}`} sub={`${kp.staff_deployed - kp.staff_marked} not marked yet`} icon="users" tone="teal" to="/attendance" />
           </div>
 
@@ -91,7 +98,7 @@ export default function Dashboard() {
             </Card>
 
             <Card title="Supply & consumption by" actions={
-              <Tabs value={f.group} onChange={(g) => set({ group: g })} tabs={[{ value: 'region', label: 'Region' }, { value: 'client', label: 'Company' }, { value: 'site', label: 'Site' }]} />}>
+              <Tabs value={f.group} onChange={(g) => set({ group: g })} tabs={[{ value: 'region', label: 'Region' }, { value: 'client', label: 'Customer' }, { value: 'site', label: 'Site' }]} />}>
               <div className="chart-box" style={{ height: Math.max(220, d.breakdown.length * 34) }}>
                 <ResponsiveContainer>
                   <BarChart data={d.breakdown} layout="vertical" margin={{ left: 0, right: 12 }} barGap={2} barCategoryGap="22%">

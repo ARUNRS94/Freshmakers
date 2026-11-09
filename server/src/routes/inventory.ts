@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { q, one, tx, Where, nextDocNo, setting } from '../lib/db.js';
-import { allow, assertSite, siteFilters } from '../lib/auth.js';
+import { need, assertSite, siteFilters } from '../lib/auth.js';
 import { bad, date, num, must, today, addDays, lines } from '../lib/http.js';
 import { postLedger, stockQty, avgCost, ensureStock, audit, type Loc } from '../lib/stock.js';
 
@@ -116,7 +116,7 @@ r.get('/consumption/sheet', async (req, res) => {
   res.json({ site_id: siteId, date: d, lines: rows });
 });
 
-r.post('/consumption', allow('BARISTA', 'MANAGER', 'SUPERVISOR', 'OPS_HEAD'), async (req, res) => {
+r.post('/consumption', need('consumption'), async (req, res) => {
   const siteId = must(num(req.body.site_id), 'site_id');
   const d = must(date(req.body.entry_date), 'entry_date');
   assertSite(req.user, siteId);
@@ -168,7 +168,7 @@ r.get('/consumption', async (req, res) => {
 });
 
 /* ---------------------------------------------------------- stock counts */
-r.post('/stock-counts', allow('MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'SCM'), async (req, res) => {
+r.post('/stock-counts', need('stock_counts'), async (req, res) => {
   const loc: Loc = { site_id: num(req.body.site_id) ?? null, warehouse_id: num(req.body.warehouse_id) ?? null };
   if (!loc.site_id === !loc.warehouse_id) throw bad('Choose either a site or a warehouse');
   if (loc.site_id) assertSite(req.user, loc.site_id);
@@ -217,7 +217,7 @@ r.get('/stock-counts/:id', async (req, res) => {
 });
 
 /* -------------------------------------------------------------- transfers */
-r.post('/transfers', allow('SUPERVISOR', 'OPS_HEAD', 'SCM'), async (req, res) => {
+r.post('/transfers', need('transfers'), async (req, res) => {
   const from: Loc = { site_id: num(req.body.from_site_id) ?? null, warehouse_id: num(req.body.from_warehouse_id) ?? null };
   const to: Loc = { site_id: num(req.body.to_site_id) ?? null, warehouse_id: num(req.body.to_warehouse_id) ?? null };
   if (!from.site_id === !from.warehouse_id || !to.site_id === !to.warehouse_id) throw bad('Choose one source and one destination');

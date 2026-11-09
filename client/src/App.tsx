@@ -19,6 +19,7 @@ const Dispatches = lazy(() => import('./pages/Dispatches'));
 const DispatchForm = lazy(() => import('./pages/DispatchForm'));
 const DispatchDetail = lazy(() => import('./pages/DispatchDetail'));
 const LocalPurchases = lazy(() => import('./pages/LocalPurchases'));
+const LocalPurchaseForm = lazy(() => import('./pages/LocalPurchaseForm'));
 const StockCounts = lazy(() => import('./pages/StockCounts'));
 const Transfers = lazy(() => import('./pages/Transfers'));
 const Payables = lazy(() => import('./pages/Payables'));
@@ -27,13 +28,16 @@ const Attendance = lazy(() => import('./pages/Attendance'));
 const Employees = lazy(() => import('./pages/Employees'));
 const Reports = lazy(() => import('./pages/Reports'));
 const Masters = lazy(() => import('./pages/Masters'));
+const MastersHub = lazy(() => import('./pages/MastersHub'));
 const Users = lazy(() => import('./pages/Users'));
+const MyAttendance = lazy(() => import('./pages/MyAttendance'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
 
 export default function App() {
-  const { user, ready } = useAuth();
+  const { user, ready, allowed } = useAuth();
   if (!ready) return <Spinner label="Starting…" />;
   if (!user) return <Login />;
-  const home = user.role === 'VENDOR' ? <Navigate to="/purchase-orders" replace /> : <Dashboard />;
+  const home = user.role === 'VENDOR' ? <Navigate to="/purchase-orders" replace /> : allowed('dashboard') ? <Dashboard /> : <Navigate to="/alerts" replace />;
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -53,13 +57,17 @@ export default function App() {
         <Route path="dispatches/new" element={<DispatchForm />} />
         <Route path="dispatches/:id" element={<DispatchDetail />} />
         <Route path="local-purchases" element={<LocalPurchases />} />
+        <Route path="local-purchases/new" element={<LocalPurchaseForm />} />
         <Route path="stock-counts" element={<StockCounts />} />
         <Route path="transfers" element={<Transfers />} />
         <Route path="finance/payables" element={<Payables />} />
         <Route path="finance/receivables" element={<Receivables />} />
         <Route path="attendance" element={<Attendance />} />
+        <Route path="my-attendance" element={<MyAttendance />} />
+        <Route path="audit" element={<AuditLog />} />
         <Route path="employees" element={<Employees />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="masters" element={<MastersHub />} />
         <Route path="masters/users" element={<Users />} />
         <Route path="masters/:kind" element={<Masters />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,14 +9,14 @@ import { useAuth } from '../lib/auth';
 
 export default function Dispatches() {
   const nav = useNavigate();
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const [f, set] = useQueryState({ status: 'IN_TRANSIT' });
   const r: Record<string, string> = f.status === 'IN_TRANSIT' ? {} : { from: f.from ?? defaultRange(14).from, to: f.to ?? defaultRange(14).to };
   const { data, loading } = useApi<any[]>(`/dispatches${qs({ status: f.status === 'ALL' ? undefined : f.status, region_id: f.region_id, client_id: f.client_id, site_id: f.site_id, ...r })}`);
   return (
     <>
       <PageHeader title="Dispatches" subtitle="Warehouse → site supply. Sites acknowledge what they actually received."
-        actions={can('SCM') && <button className="btn" onClick={() => nav('/dispatches/new')}><Icon name="plus" size={16} /> New dispatch</button>} />
+        actions={allowed('dispatches', 'edit') && <button className="btn" onClick={() => nav('/dispatches/new')}><Icon name="plus" size={16} /> New dispatch</button>} />
       <Tabs value={f.status} onChange={(s) => set({ status: s })} tabs={[{ value: 'IN_TRANSIT', label: 'In transit' }, { value: 'RECEIVED', label: 'Received' },
         { value: 'CANCELLED', label: 'Cancelled' }, { value: 'ALL', label: 'All' }]} />
       <SliceBar values={{ ...f, ...r }} set={set} show={f.status === 'IN_TRANSIT' ? ['region', 'client', 'site'] : ['region', 'client', 'site', 'dates']} />

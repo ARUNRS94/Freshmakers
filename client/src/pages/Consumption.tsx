@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
 import { api, qs } from '../lib/api';
-import { useApi, useLookups, useQueryState } from '../lib/hooks';
+import { useApi, useQueryState, useSite } from '../lib/hooks';
 import { addDays, fmtDate, num, qty, today } from '../lib/format';
-import { Badge, Card, ErrorBox, PageHeader, Spinner, Tabs, useToast } from '../components/ui';
+import { Card, ErrorBox, PageHeader, Spinner, Tabs, useToast } from '../components/ui';
 import { DataTable } from '../components/DataTable';
 import { SliceBar, defaultRange } from '../components/Filters';
+import { SearchBox, Seg, SiteSelect, Stepper } from '../components/QuickEntry';
 import { useAuth } from '../lib/auth';
 
 type Row = { item_id: number; name: string; category: string; uom: string; available: number; qty_used: number | null; qty_wasted: number | null; remarks: string | null };
+type Value = { u: string; w: string; r: string };
+
+const usedText = (l: Row) => l.qty_used?.toString() ?? '';
+const wastedText = (l: Row) => (l.qty_wasted ? String(l.qty_wasted) : '');
 
 export default function Consumption() {
   const [f, set] = useQueryState({ tab: 'entry' });
   return (
     <>
-      <PageHeader title="Daily consumption" subtitle="Record raw material used and wasted at a site — stock updates instantly" />
+      <PageHeader title="Daily consumption" subtitle="Enter what was used today. Stock updates as soon as you save." />
       <Tabs value={f.tab} onChange={(t) => set({ tab: t })} tabs={[{ value: 'entry', label: 'Entry' }, { value: 'history', label: 'History' }]} />
       {f.tab === 'history' ? <History f={f} set={set} /> : <Entry f={f} set={set} />}
     </>
@@ -21,99 +26,127 @@ export default function Consumption() {
 }
 
 function Entry({ f, set }: { f: Record<string, string>; set: (p: Record<string, string | undefined>) => void }) {
-  const lk = useLookups();
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const toast = useToast();
-  const siteId = f.site_id ?? (lk?.sites.length ? String(lk.sites[0].id) : '');
+  const [siteId, chooseSite] = useSite(f.site_id);
   const date = f.date ?? today();
-  const [all, setAll] = useState(false);
-  const { data, loading, error, reload } = useApi<{ lines: Row[] }>(siteId ? `/consumption/sheet${qs({ site_id: siteId, date, all })}` : null);
-  const [vals, setVals] = useState<Record<number, { u: string; w: string; r: string }>>({});
+  const yesterday = addDays(today(), -1);
+  const [showAll, setShowAll] = useState(false);
+  const [showWaste, setShowWaste] = useState(false);
+  const [term, setTerm] = useState('');
+  // always fetches every item, so "Show all items" never discards what has been typed
+  const { data, loading, error, reload } = useApi<{ lines: Row[] }>(siteId ? `/consumption/sheet${qs({ site_id: siteId, date, all: true })}` : null);
+  const [vals, setVals] = useState<Record<number, Value>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
     if (!data) return;
-    setVals(Object.fromEntries(data.lines.map((l) => [l.item_id, { u: l.qty_used?.toString() ?? '', w: l.qty_wasted ? String(l.qty_wasted) : '', r: l.remarks ?? '' }])));
+    setVals(Object.fromEntries(data.lines.map((l) => [l.item_id, { u: usedText(l), w: wastedText(l), r: l.remarks ?? '' }])));
   }, [data]);
 
-  const dirty = data?.lines.some((l) => {
+  const lines = data?.lines ?? [];
+  const inUse = lines.filter((l) => l.available > 0 || l.qty_used !== null || l.qty_wasted !== null);
+  const shown = (showAll ? lines : inUse).filter((l) => !term || l.name.toLowerCase().includes(term.toLowerCase()));
+  const entered = inUse.filter((l) => vals[l.item_id]?.u || vals[l.item_id]?.w).length;
+  const wasteOn = showWaste || lines.some((l) => l.qty_wasted);
+  const dirty = lines.some((l) => {
     const v = vals[l.item_id];
-    return v && (v.u !== (l.qty_used?.toString() ?? '') || v.w !== (l.qty_wasted ? String(l.qty_wasted) : ''));
+    return v && (v.u !== usedText(l) || v.w !== wastedText(l));
   });
+
+  const update = (id: number, change: Partial<Value>) => setVals((all) => ({ ...all, [id]: { ...(all[id] ?? { u: '', w: '', r: '' }), ...change } }));
+
+  const copyPreviousDay = async () => {
+    setErr('');
+    try {
+      const prev = addDays(date, -1);
+      const rows = await api<{ item_id: number; qty_used: number }[]>(`/consumption${qs({ site_id: siteId, from: prev, to: prev })}`);
+      const fill = rows.filter((r) => r.qty_used > 0 && !vals[r.item_id]?.u);
+      if (!fill.length) return toast(`Nothing to copy from ${fmtDate(prev)}`);
+      setVals((all) => {
+        const next = { ...all };
+        for (const r of fill) next[r.item_id] = { ...(next[r.item_id] ?? { u: '', w: '', r: '' }), u: String(r.qty_used) };
+        return next;
+      });
+      toast(`Filled ${fill.length} item(s) from ${fmtDate(prev)}. Check them, then save.`);
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
     setErr('');
     try {
-      const lines = data!.lines.filter((l) => vals[l.item_id] && (vals[l.item_id].u !== '' || vals[l.item_id].w !== '' || l.qty_used !== null))
+      const body = lines.filter((l) => vals[l.item_id] && (vals[l.item_id].u !== '' || vals[l.item_id].w !== '' || l.qty_used !== null))
         .map((l) => ({ item_id: l.item_id, qty_used: Number(vals[l.item_id].u || 0), qty_wasted: Number(vals[l.item_id].w || 0), remarks: vals[l.item_id].r }));
-      if (!lines.length) throw new Error('Enter at least one quantity');
-      const r = await api('/consumption', { body: { site_id: Number(siteId), entry_date: date, lines } });
+      if (!body.length) throw new Error('Enter at least one quantity');
+      const r = await api('/consumption', { body: { site_id: Number(siteId), entry_date: date, lines: body } });
       toast(`Saved ${r.saved} item(s)`);
       reload();
     } catch (e: any) {
       setErr(e.message);
+      toast(e.message, 'err'); // Save sits below a long list, so the box at the top may be out of view
     } finally {
       setBusy(false);
     }
   };
 
-  const readOnly = !can('BARISTA', 'MANAGER', 'SUPERVISOR', 'OPS_HEAD');
+  const readOnly = !allowed('consumption', 'edit');
   return (
-    <Card title={
-      <div className="row gap">
-        <select className="input" style={{ minWidth: 220 }} value={siteId} onChange={(e) => set({ site_id: e.target.value })} aria-label="Site">
-          {lk?.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <input type="date" className="input" style={{ width: 160 }} value={date} max={today()} onChange={(e) => set({ date: e.target.value })} aria-label="Date" />
-        <div className="seg">
-          <button className={date === addDays(today(), -1) ? 'active' : ''} onClick={() => set({ date: addDays(today(), -1) })}>Yesterday</button>
-          <button className={date === today() ? 'active' : ''} onClick={() => set({ date: today() })}>Today</button>
-        </div>
-      </div>}
-      actions={<label className="check"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /> Show all items</label>}>
-      <ErrorBox>{error || err}</ErrorBox>
-      {loading && !data ? <Spinner /> : data && (
-        <div className="stack">
-          <div className="dt-scroll">
-            <table className="table">
-              <thead>
-                <tr><th>Item</th><th className="ta-right">Available</th><th style={{ width: 140 }}>Used</th><th style={{ width: 120 }}>Wasted</th><th className="ta-right">Balance after</th></tr>
-              </thead>
-              <tbody>
-                {data.lines.map((l) => {
-                  const v = vals[l.item_id] ?? { u: '', w: '', r: '' };
-                  const after = l.available - Number(v.u || 0) - Number(v.w || 0);
-                  return (
-                    <tr key={l.item_id} className={after < 0 ? 'row-danger' : ''}>
-                      <td className="td-primary" data-label="Item">{l.name} <Badge>{l.category}</Badge></td>
-                      <td className="ta-right" data-label="Available">{qty(l.available, l.uom)}</td>
-                      <td data-label={`Used (${l.uom})`}>
-                        <input className="input" type="number" inputMode="decimal" min="0" step="any" value={v.u} disabled={readOnly} aria-label={`${l.name} used`}
-                          onChange={(e) => setVals({ ...vals, [l.item_id]: { ...v, u: e.target.value } })} />
-                      </td>
-                      <td data-label={`Wasted (${l.uom})`}>
-                        <input className="input" type="number" inputMode="decimal" min="0" step="any" value={v.w} disabled={readOnly} aria-label={`${l.name} wasted`}
-                          onChange={(e) => setVals({ ...vals, [l.item_id]: { ...v, w: e.target.value } })} />
-                      </td>
-                      <td className={`ta-right ${after < 0 ? 'text-red' : ''}`} data-label="Balance after"><strong>{qty(Math.round(after * 1000) / 1000, l.uom)}</strong></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+    <>
+      <Card>
+        <div className="stack" style={{ gap: '.75rem' }}>
+          <div className="entry-head">
+            <div className="site"><SiteSelect value={siteId} onChange={(id) => { chooseSite(id); set({ site_id: id }); }} /></div>
+            <Seg label="Day" value={date} onChange={(d) => set({ date: d })} options={[{ value: yesterday, label: 'Yesterday' }, { value: today(), label: 'Today' }]} />
+            <input type="date" className="input" value={date} max={today()} onChange={(e) => set({ date: e.target.value })} aria-label="Date" />
           </div>
-          {!data.lines.length && <div className="empty">No items stocked at this site yet. Tick “Show all items”.</div>}
-          {!readOnly && (
-            <div className="row gap" style={{ justifyContent: 'flex-end' }}>
-              <span className="muted small grow">{dirty ? 'Unsaved changes' : `Entries for ${fmtDate(date)}`}</span>
-              <button className="btn" onClick={save} disabled={busy || !dirty}>{busy ? 'Saving…' : 'Save consumption'}</button>
+          <div className="sheet-tools">
+            <SearchBox value={term} onChange={setTerm} placeholder="Search items…" />
+            {!readOnly && <button type="button" className="btn btn-ghost btn-sm" disabled={!data} onClick={copyPreviousDay}>Copy previous day</button>}
+            <label className="check"><input type="checkbox" checked={wasteOn} disabled={lines.some((l) => l.qty_wasted)} onChange={(e) => setShowWaste(e.target.checked)} /> Wastage</label>
+            <label className="check"><input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> All items</label>
+          </div>
+          <ErrorBox>{error || err}</ErrorBox>
+          {loading && !data ? <Spinner /> : data && (
+            <div className="sheet">
+              {!shown.length && <div className="empty">{term ? 'No items match' : 'No stock at this site yet. Tick “All items” to see everything.'}</div>}
+              {shown.map((l) => {
+                const v = vals[l.item_id] ?? { u: '', w: '', r: '' };
+                const left = Math.round((l.available - Number(v.u || 0) - Number(v.w || 0)) * 1000) / 1000;
+                return (
+                  <div key={l.item_id} className={`sheet-row ${v.u || v.w ? 'picked' : ''} ${left < 0 ? 'over' : ''}`}>
+                    <div className="sheet-item">
+                      <strong>{l.name}</strong>
+                      <div className="sheet-info">Available {qty(l.available, l.uom)}</div>
+                    </div>
+                    <div className={`sheet-left ${left < 0 ? 'text-red' : 'muted'}`}>{left < 0 ? 'Short ' : 'Left '}{qty(Math.abs(left), l.uom)}</div>
+                    <div className="qty-field">
+                      <span>Used ({l.uom})</span>
+                      <Stepper value={v.u} disabled={readOnly} label={`${l.name} used`} onChange={(u) => update(l.item_id, { u })} />
+                    </div>
+                    {wasteOn && (
+                      <div className="qty-field">
+                        <span>Wasted ({l.uom})</span>
+                        <Stepper value={v.w} disabled={readOnly} label={`${l.name} wasted`} onChange={(w) => update(l.item_id, { w })} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
+      </Card>
+      {!readOnly && data && (
+        <div className="action-bar">
+          <span className="muted small grow">{entered} of {inUse.length} items entered for {fmtDate(date)}{dirty ? ' · Not saved yet' : ''}</span>
+          <button className="btn" onClick={save} disabled={busy || loading || !dirty}>{busy ? 'Saving…' : 'Save consumption'}</button>
+        </div>
       )}
-    </Card>
+    </>
   );
 }
 

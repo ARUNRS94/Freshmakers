@@ -8,7 +8,7 @@ import { useAuth } from '../lib/auth';
 
 export default function DispatchDetail() {
   const { id } = useParams();
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const toast = useToast();
   const { data: d, loading, error, reload } = useApi<any>(`/dispatches/${id}`);
   const [recv, setRecv] = useState<Record<number, string>>({});
@@ -21,7 +21,7 @@ export default function DispatchDetail() {
 
   if (loading && !d) return <Spinner />;
   if (!d) return <ErrorBox>{error}</ErrorBox>;
-  const canReceive = d.status === 'IN_TRANSIT' && can('BARISTA', 'MANAGER', 'SUPERVISOR', 'SCM');
+  const canReceive = d.status === 'IN_TRANSIT' && allowed('dispatch_receive', 'edit');
 
   const run = async (path: string, body: any, msg: string) => {
     setBusy(true);
@@ -40,12 +40,12 @@ export default function DispatchDetail() {
   return (
     <>
       <PageHeader back="/dispatches" title={<>{d.dispatch_no} <Badge>{d.status}</Badge></>} subtitle={`${d.warehouse_name} → ${d.site_name}`}
-        actions={d.status === 'IN_TRANSIT' && can('SCM') && <button className="btn btn-ghost" disabled={busy} onClick={() => confirm('Cancel dispatch and return stock to warehouse?') && run(`/dispatches/${id}/cancel`, {}, 'Dispatch cancelled')}>Cancel dispatch</button>} />
+        actions={d.status === 'IN_TRANSIT' && allowed('dispatches', 'edit') && <button className="btn btn-ghost" disabled={busy} onClick={() => confirm('Cancel dispatch and return stock to warehouse?') && run(`/dispatches/${id}/cancel`, {}, 'Dispatch cancelled')}>Cancel dispatch</button>} />
       <ErrorBox>{err}</ErrorBox>
       <Card>
         <div className="stats">
           <Stat label="Dispatched">{fmtDate(d.dispatch_date)}</Stat>
-          <Stat label="Client">{d.client_name}</Stat>
+          <Stat label="Customer">{d.client_name}</Stat>
           <Stat label="Vehicle / driver">{d.vehicle_no ?? '—'} · {d.driver_name ?? '—'}</Stat>
           {d.indent_no && <Stat label="Indent"><Link to={`/indents/${d.indent_id}`}>{d.indent_no}</Link></Stat>}
           {d.received_date && <Stat label="Received">{fmtDate(d.received_date)} · {d.received_by_name}</Stat>}
@@ -77,7 +77,7 @@ export default function DispatchDetail() {
         </div>
         {canReceive && (
           <div className="card-body row gap" style={{ justifyContent: 'flex-end', borderTop: '1px solid var(--border)' }}>
-            <span className="muted small grow">Stock will be added to the site and the client invoice raised for received quantities.</span>
+            <span className="muted small grow">Stock will be added to the site and the customer invoice raised for received quantities.</span>
             <button className="btn" disabled={busy} onClick={() => run(`/dispatches/${id}/receive`, { lines: Object.entries(recv).map(([lid, q]) => ({ id: Number(lid), qty_received: Number(q || 0) })) }, 'Receipt confirmed')}>
               Confirm receipt
             </button>

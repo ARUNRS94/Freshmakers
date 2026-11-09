@@ -9,13 +9,13 @@ import { useAuth } from '../lib/auth';
 
 export default function PurchaseOrders() {
   const nav = useNavigate();
-  const { can, user } = useAuth();
+  const { allowed, user } = useAuth();
   const [f, set] = useQueryState({ status: 'OPEN' });
   const { data, loading } = useApi<any[]>(`/purchase-orders${qs({ status: f.status === 'ALL' ? undefined : f.status, vendor_id: f.vendor_id, from: f.from, to: f.to })}`);
   return (
     <>
       <PageHeader title={user?.role === 'VENDOR' ? 'My purchase orders' : 'Purchase orders'} subtitle="Ordered vs received from vendors"
-        actions={can('SCM') && <button className="btn" onClick={() => nav('/purchase-orders/new')}><Icon name="plus" size={16} /> New PO</button>} />
+        actions={allowed('purchase_orders', 'edit') && <button className="btn" onClick={() => nav('/purchase-orders/new')}><Icon name="plus" size={16} /> New PO</button>} />
       <Tabs value={f.status} onChange={(s) => set({ status: s })} tabs={[{ value: 'OPEN', label: 'Open' }, { value: 'PARTIAL', label: 'Partially received' },
         { value: 'RECEIVED', label: 'Received' }, { value: 'CLOSED', label: 'Closed' }, { value: 'CANCELLED', label: 'Cancelled' }, { value: 'ALL', label: 'All' }]} />
       {user?.role !== 'VENDOR' && <SliceBar values={f} set={set} show={['vendor', 'dates']} />}

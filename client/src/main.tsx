@@ -5,6 +5,9 @@ import './index.css';
 import App from './App';
 import { AuthProvider } from './lib/auth';
 import { ToastProvider } from './components/ui';
+import { applyTheme, readTheme } from './lib/theme';
+
+applyTheme(readTheme());
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

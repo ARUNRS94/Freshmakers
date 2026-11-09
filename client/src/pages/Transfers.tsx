@@ -32,7 +32,7 @@ export default function Transfers() {
 
 function TransferForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const lk = useLookups();
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const toast = useToast();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -62,7 +62,7 @@ function TransferForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const opts = (
     <>
       <option value="">Select…</option>
-      {can('SCM') && <optgroup label="Warehouses">{lk?.warehouses.map((w) => <option key={w.id} value={`w${w.id}`}>{w.name}</option>)}</optgroup>}
+      {allowed('transfers', 'edit') && <optgroup label="Warehouses">{lk?.warehouses.map((w) => <option key={w.id} value={`w${w.id}`}>{w.name}</option>)}</optgroup>}
       <optgroup label="Sites">{lk?.sites.map((s) => <option key={s.id} value={`s${s.id}`}>{s.name}</option>)}</optgroup>
     </>
   );

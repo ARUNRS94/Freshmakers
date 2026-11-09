@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { PoolClient } from 'pg';
 import { q, one, tx, Where, nextDocNo, setting } from '../lib/db.js';
-import { allow, assertSite, canAccessSite, siteFilters, type Role, type AuthUser } from '../lib/auth.js';
+import { need, assertSite, canAccessSite, siteFilters, type Role, type AuthUser } from '../lib/auth.js';
 import { bad, forbidden, notFound, date, num, must, today, addDays, lines } from '../lib/http.js';
 import { postLedger, stockQty, avgCost, ensureStock, vendorRate, clientRate, refreshIndent, audit } from '../lib/stock.js';
 
@@ -89,7 +89,7 @@ async function submitIndent(c: PoolClient, ind: any, user: AuthUser) {
   await c.query(`INSERT INTO indent_approvals(indent_id,stage,action,user_id) VALUES ($1,$2,'SUBMIT',$3)`, [ind.id, user.role, user.id]);
 }
 
-r.post('/indents', allow('BARISTA', 'MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'SCM'), async (req, res) => {
+r.post('/indents', need('indents'), async (req, res) => {
   const siteId = must(num(req.body.site_id), 'Site');
   assertSite(req.user, siteId);
   const reqDate = must(date(req.body.required_date), 'Required date');
@@ -199,7 +199,7 @@ function vendorScope(req: any, w: Where, col = 'p.vendor_id') {
   if (req.user.role === 'VENDOR') w.add(`${col} = ?`, req.user.vendor_id ?? -1);
 }
 
-r.get('/purchase-orders', allow('SCM', 'CBO', 'FINANCE', 'VENDOR', 'OPS_HEAD'), async (req, res) => {
+r.get('/purchase-orders', async (req, res) => {
   const w = new Where();
   vendorScope(req, w);
   const st = req.query.status as string | undefined;
@@ -217,7 +217,7 @@ r.get('/purchase-orders', allow('SCM', 'CBO', 'FINANCE', 'VENDOR', 'OPS_HEAD'), 
      ${w.sql} GROUP BY p.id, v.name, wh.name, s.name, i.indent_no ORDER BY p.po_date DESC, p.id DESC LIMIT 1000`, w.params));
 });
 
-r.get('/purchase-orders/:id', allow('SCM', 'CBO', 'FINANCE', 'VENDOR', 'OPS_HEAD'), async (req, res) => {
+r.get('/purchase-orders/:id', async (req, res) => {
   const w = new Where();
   w.add('p.id = ?', Number(req.params.id));
   vendorScope(req, w);
@@ -237,7 +237,7 @@ r.get('/purchase-orders/:id', allow('SCM', 'CBO', 'FINANCE', 'VENDOR', 'OPS_HEAD
 });
 
 /** Price + MOQ hints for building a PO */
-r.get('/purchase-orders-helper/rates', allow('SCM'), async (req, res) => {
+r.get('/purchase-orders-helper/rates', async (req, res) => {
   const vendorId = must(num(req.query.vendor_id), 'vendor_id');
   res.json(await q(
     `SELECT i.id item_id, i.name, i.uom, i.min_order_qty item_moq, i.gst_rate, r.rate, r.min_order_qty vendor_moq, i.std_purchase_rate
@@ -245,7 +245,7 @@ r.get('/purchase-orders-helper/rates', allow('SCM'), async (req, res) => {
        AND v.effective_from<=CURRENT_DATE ORDER BY effective_from DESC LIMIT 1) r ON TRUE WHERE i.active ORDER BY i.name`, [vendorId]));
 });
 
-r.post('/purchase-orders', allow('SCM'), async (req, res) => {
+r.post('/purchase-orders', need('purchase_orders'), async (req, res) => {
   const vendorId = must(num(req.body.vendor_id), 'Vendor');
   const whId = num(req.body.warehouse_id) ?? null;
   const siteId = num(req.body.site_id) ?? null;
@@ -279,13 +279,13 @@ r.post('/purchase-orders', allow('SCM'), async (req, res) => {
         num(req.body.indent_id) ?? null, req.body.notes ?? null, req.user.id], c);
     for (const p of prepared)
       await c.query('INSERT INTO po_lines(po_id,item_id,qty_ordered,rate,gst_rate) VALUES ($1,$2,$3,$4,$5)', [po.id, p.item_id, p.qty, p.rate, p.gst]);
-    await audit(c, req.user.id, 'CREATE', 'purchase_orders', po.id, { warnings });
+    if (warnings.length) await audit(c, req.user.id, 'PO_OVERRIDE', 'purchase_orders', po.id, { warnings });
     return { id: po.id, warnings };
   });
   res.status(201).json(result);
 });
 
-r.post('/purchase-orders/:id/ack', allow('VENDOR', 'SCM'), async (req, res) => {
+r.post('/purchase-orders/:id/ack', need('po_ack'), async (req, res) => {
   const w = new Where();
   w.add('id = ?', Number(req.params.id));
   if (req.user.role === 'VENDOR') w.add('vendor_id = ?', req.user.vendor_id ?? -1);
@@ -295,7 +295,7 @@ r.post('/purchase-orders/:id/ack', allow('VENDOR', 'SCM'), async (req, res) => {
 });
 
 for (const action of ['cancel', 'close'] as const) {
-  r.post(`/purchase-orders/:id/${action}`, allow('SCM'), async (req, res) => {
+  r.post(`/purchase-orders/:id/${action}`, need('purchase_orders'), async (req, res) => {
     const po = await one<any>('SELECT * FROM purchase_orders WHERE id=$1', [req.params.id]);
     if (!po) throw notFound('Purchase order');
     if (action === 'cancel') {
@@ -310,7 +310,7 @@ for (const action of ['cancel', 'close'] as const) {
 }
 
 /** Goods receipt against a PO: stock in, PO progress, vendor bill */
-r.post('/purchase-orders/:id/grn', allow('SCM', 'MANAGER', 'SUPERVISOR'), async (req, res) => {
+r.post('/purchase-orders/:id/grn', need('grn'), async (req, res) => {
   const ls = lines<any>(req.body.lines);
   const grnDate = date(req.body.grn_date) ?? today();
   const out = await tx(async (c) => {
@@ -381,7 +381,7 @@ r.get('/local-purchases', async (req, res) => {
      ${w.sql} ORDER BY lp.purchase_date DESC, lp.id DESC LIMIT 1000`, w.params));
 });
 
-r.post('/local-purchases', allow('MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'SCM'), async (req, res) => {
+r.post('/local-purchases', need('local_purchases'), async (req, res) => {
   const vendorId = must(num(req.body.vendor_id), 'Vendor / shop');
   const siteId = num(req.body.site_id) ?? null;
   const whId = num(req.body.warehouse_id) ?? null;
@@ -454,7 +454,7 @@ r.get('/dispatches/:id', async (req, res) => {
   res.json({ ...d, lines: ls });
 });
 
-r.post('/dispatches', allow('SCM'), async (req, res) => {
+r.post('/dispatches', need('dispatches'), async (req, res) => {
   const whId = must(num(req.body.warehouse_id), 'Warehouse');
   const siteId = must(num(req.body.site_id), 'Site');
   const d = date(req.body.dispatch_date) ?? today();
@@ -494,7 +494,7 @@ r.post('/dispatches', allow('SCM'), async (req, res) => {
   res.status(201).json({ id });
 });
 
-r.post('/dispatches/:id/receive', allow('BARISTA', 'MANAGER', 'SUPERVISOR', 'SCM'), async (req, res) => {
+r.post('/dispatches/:id/receive', need('dispatch_receive'), async (req, res) => {
   const out = await tx(async (c) => {
     const d = await one<any>('SELECT d.*, s.client_id FROM dispatches d JOIN sites s ON s.id=d.site_id WHERE d.id=$1 FOR UPDATE OF d', [req.params.id], c);
     if (!d) throw notFound('Dispatch');
@@ -537,7 +537,7 @@ r.post('/dispatches/:id/receive', allow('BARISTA', 'MANAGER', 'SUPERVISOR', 'SCM
   res.json({ ok: true, ...out });
 });
 
-r.post('/dispatches/:id/cancel', allow('SCM'), async (req, res) => {
+r.post('/dispatches/:id/cancel', need('dispatches'), async (req, res) => {
   await tx(async (c) => {
     const d = await one<any>('SELECT * FROM dispatches WHERE id=$1 FOR UPDATE', [req.params.id], c);
     if (!d) throw notFound('Dispatch');

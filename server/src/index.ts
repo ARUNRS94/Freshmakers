@@ -5,8 +5,8 @@ import bcrypt from 'bcryptjs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { one, pool } from './lib/db.js';
-import { authenticate, loadUser, signToken } from './lib/auth.js';
+import { one, pool, q } from './lib/db.js';
+import { authenticate, loadUser, signToken, viewGate } from './lib/auth.js';
 import { bad, errorHandler, HttpError } from './lib/http.js';
 import masters from './routes/masters.js';
 import inventory from './routes/inventory.js';
@@ -14,6 +14,8 @@ import operations from './routes/operations.js';
 import finance from './routes/finance.js';
 import people from './routes/people.js';
 import analytics from './routes/analytics.js';
+import masterData from './routes/masterData.js';
+import admin from './routes/admin.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -49,10 +51,13 @@ app.post('/api/auth/change-password', async (req, res) => {
   const u = await one<any>('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
   if (!(await bcrypt.compare(String(current ?? ''), u.password_hash))) throw bad('Current password is incorrect');
   if (String(next ?? '').length < 6) throw bad('New password must be at least 6 characters');
-  await pool.query('UPDATE users SET password_hash=$2 WHERE id=$1', [req.user.id, await bcrypt.hash(String(next), 10)]);
+  await q('UPDATE users SET password_hash=$2 WHERE id=$1', [req.user.id, await bcrypt.hash(String(next), 10)]);
   res.json({ ok: true });
 });
 
+app.use('/api', viewGate);
+app.use('/api/master-data', masterData);
+app.use('/api', admin);
 app.use('/api', masters);
 app.use('/api', inventory);
 app.use('/api', operations);

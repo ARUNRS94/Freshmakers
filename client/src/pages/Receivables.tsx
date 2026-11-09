@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth';
 import { AgeingTable } from './Payables';
 
 export default function Receivables() {
-  const { can } = useAuth();
+  const { allowed } = useAuth();
   const toast = useToast();
   const [f, set] = useQueryState({ tab: 'invoices', status: 'UNPAID' });
   const inv = useApi<any[]>(f.tab === 'invoices' ? `/finance/client-invoices${qs({ status: f.status === 'ALL' ? undefined : f.status, region_id: f.region_id, client_id: f.client_id, site_id: f.site_id, from: f.from, to: f.to })}` : null);
@@ -38,7 +38,7 @@ export default function Receivables() {
 
   return (
     <>
-      <PageHeader title="Client receivables" subtitle="Invoices raised automatically when sites acknowledge dispatches, at the client’s agreed rates" />
+      <PageHeader title="Customer receivables" subtitle="Invoices raised automatically when sites acknowledge dispatches, at the customer’s agreed rates" />
       <Tabs value={f.tab} onChange={(t) => set({ tab: t })} tabs={[{ value: 'invoices', label: 'Invoices' }, { value: 'receipts', label: 'Receipts' }, { value: 'ageing', label: 'Ageing' }]} />
       {f.tab !== 'ageing' && (
         <SliceBar values={f} set={set} show={['region', 'client', 'site', 'dates']} extra={f.tab === 'invoices' && (
@@ -55,16 +55,16 @@ export default function Receivables() {
             </div>
           )}
           <Card pad={false}>
-            <DataTable loading={inv.loading} rows={inv.data} exportName="client-invoices" rowClass={(b) => (b.status !== 'PAID' && b.overdue_days > 0 ? 'row-danger' : '')} columns={[
+            <DataTable loading={inv.loading} rows={inv.data} exportName="customer-invoices" rowClass={(b) => (b.status !== 'PAID' && b.overdue_days > 0 ? 'row-danger' : '')} columns={[
               { key: 'invoice_no', label: 'Invoice', primary: true },
-              { key: 'client_name', label: 'Client', render: (b) => <span>{b.client_name}<br /><span className="muted small">{b.site_name}</span></span> },
+              { key: 'client_name', label: 'Customer', render: (b) => <span>{b.client_name}<br /><span className="muted small">{b.site_name}</span></span> },
               { key: 'invoice_date', label: 'Date', render: (b) => fmtDate(b.invoice_date) },
               { key: 'due_date', label: 'Due', render: (b) => <span className={b.status !== 'PAID' && b.overdue_days > 0 ? 'text-red' : ''}>{fmtDate(b.due_date)}</span> },
               { key: 'total', label: 'Amount', align: 'right', value: (b) => b.amount + b.tax_amount, sum: true, render: (b) => money(b.total ?? b.amount + b.tax_amount, true) },
               { key: 'received', label: 'Received', align: 'right', sum: true, render: (b) => money(b.received, true) },
               { key: 'balance', label: 'Balance', align: 'right', sum: true, render: (b) => <strong>{money(b.balance, true)}</strong> },
               { key: 'status', label: 'Status', render: (b) => <Badge>{b.status}</Badge> },
-              ...(can('FINANCE') ? [{ key: 'act', label: '', render: (b: any) => b.status !== 'PAID' && (
+              ...(allowed('receivables', 'edit') ? [{ key: 'act', label: '', render: (b: any) => b.status !== 'PAID' && (
                 <button className="btn btn-sm" onClick={() => { setErr(''); setForm({ amount: String(b.balance), mode: 'NEFT', reference: '', receipt_date: today() }); setSel(b); }}>Receive</button>) }] : []),
             ]} />
           </Card>
@@ -72,9 +72,9 @@ export default function Receivables() {
       )}
       {f.tab === 'receipts' && (
         <Card pad={false}>
-          <DataTable loading={rec.loading} rows={rec.data} exportName="client-receipts" columns={[
+          <DataTable loading={rec.loading} rows={rec.data} exportName="customer-receipts" columns={[
             { key: 'receipt_date', label: 'Date', render: (p) => fmtDate(p.receipt_date) },
-            { key: 'client_name', label: 'Client', primary: true },
+            { key: 'client_name', label: 'Customer', primary: true },
             { key: 'invoice_no', label: 'Invoice' },
             { key: 'mode', label: 'Mode', render: (p) => <Badge tone="gray">{p.mode}</Badge> },
             { key: 'reference', label: 'Reference' },

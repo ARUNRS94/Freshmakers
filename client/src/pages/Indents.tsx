@@ -9,16 +9,16 @@ import { useAuth } from '../lib/auth';
 
 export default function Indents() {
   const nav = useNavigate();
-  const { can } = useAuth();
+  const { allowed, isRole } = useAuth();
   const [f, set] = useQueryState({ status: 'OPEN' });
   const tab = f.awaiting_me === 'true' ? 'MINE' : f.status;
   const { data, loading } = useApi<any[]>(`/indents${qs({ region_id: f.region_id, client_id: f.client_id, site_id: f.site_id, status: tab === 'MINE' ? undefined : f.status === 'ALL' ? undefined : f.status, awaiting_me: f.awaiting_me, from: f.from, to: f.to })}`);
   return (
     <>
       <PageHeader title="Indents" subtitle="Site requisitions with future required dates, routed through the approval chain"
-        actions={can('BARISTA', 'MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'SCM') && <button className="btn" onClick={() => nav('/indents/new')}><Icon name="plus" size={16} /> New indent</button>} />
+        actions={allowed('indents', 'edit') && <button className="btn" onClick={() => nav('/indents/new')}><Icon name="plus" size={16} /> New indent</button>} />
       <Tabs value={tab} onChange={(t) => set(t === 'MINE' ? { awaiting_me: 'true', status: undefined } : { status: t, awaiting_me: undefined })} tabs={[
-        ...(can('MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'CBO', 'SCM') ? [{ value: 'MINE', label: 'Needs my action' }] : []),
+        ...(isRole('MANAGER', 'SUPERVISOR', 'OPS_HEAD', 'CBO', 'SCM') ? [{ value: 'MINE', label: 'Needs my action' }] : []),
         { value: 'OPEN', label: 'Open' }, { value: 'PENDING', label: 'Pending approval' }, { value: 'APPROVED', label: 'Approved' },
         { value: 'PARTIAL', label: 'Partial' }, { value: 'CLOSED', label: 'Closed' }, { value: 'ALL', label: 'All' }]} />
       <SliceBar values={f} set={set} show={['region', 'client', 'site', 'dates']} />
