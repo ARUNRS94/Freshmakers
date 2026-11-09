@@ -9,7 +9,8 @@ pg.types.setTypeParser(1082, (v) => v);
 
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/freshmakers',
-  max: 20,
+  // each serverless instance has its own pool, so keep them small; above 1 because some queries run beside an open transaction
+  max: process.env.VERCEL ? 5 : 20,
 });
 
 export type Db = pg.Pool | pg.PoolClient;

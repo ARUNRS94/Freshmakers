@@ -45,7 +45,13 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
     throw new ApiError(0, 'Cannot reach the server. Check your connection.');
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // a hosting error page or the app's own HTML, so the request never reached the API
+    throw new ApiError(res.status, `Cannot reach the API (${res.status}). Check that it is deployed and that VITE_API_URL is set.`);
+  }
   if (!res.ok) {
     if (res.status === 401 && path !== '/auth/login') window.dispatchEvent(new Event('fm:logout'));
     throw new ApiError(res.status, data?.error ?? `Request failed (${res.status})`, data?.details);

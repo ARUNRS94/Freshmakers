@@ -76,5 +76,10 @@ if (clientDist) {
 
 app.use(errorHandler);
 
-const port = Number(process.env.PORT ?? 4000);
-app.listen(port, () => console.log(`Freshmakers API listening on http://localhost:${port}`));
+// Vercel runs the exported app itself; everywhere else this process listens
+if (!process.env.VERCEL) {
+  const port = Number(process.env.PORT ?? 4000);
+  app.listen(port, () => console.log(`Freshmakers API listening on http://localhost:${port}`));
+}
+
+export default app;
