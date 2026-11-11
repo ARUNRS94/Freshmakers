@@ -3,7 +3,10 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth, type Level } from '../lib/auth';
 import { useApi } from '../lib/hooks';
 import { readTheme, saveTheme, type Theme } from '../lib/theme';
-import { Icon, Spinner } from './ui';
+import { Icon, Spinner, useToast } from './ui';
+import { Modal } from './Form';
+import { ErrorBoundary } from './ErrorBoundary';
+import { ChangePasswordForm } from '../pages/ChangePassword';
 
 interface NavItem { to: string; label: string; icon: string; module?: string; level?: Level; any?: string[]; needsEmployee?: boolean }
 const MASTER_MODULES = ['regions', 'customers', 'sites', 'warehouses', 'items', 'vendors', 'vendor_rates', 'customer_rates', 'employees'];
@@ -87,6 +90,8 @@ function ThemeToggle() {
 export function Layout() {
   const { user, logout, allowed } = useAuth();
   const [open, setOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const toast = useToast();
   const loc = useLocation();
   const alerts = useApi<any[]>('/alerts');
   useEffect(() => setOpen(false), [loc.pathname]);
@@ -136,9 +141,13 @@ export function Layout() {
             <strong>{user.name}</strong>
             <span>{user.role_name}</span>
           </div>
+          <button className="icon-btn" onClick={() => setPwOpen(true)} aria-label="Change password" title="Change password"><Icon name="key" /></button>
           <button className="icon-btn" onClick={logout} aria-label="Sign out" title="Sign out"><Icon name="logout" /></button>
         </div>
       </aside>
+      <Modal open={pwOpen} onClose={() => setPwOpen(false)} title="Change password">
+        <ChangePasswordForm onDone={() => { setPwOpen(false); toast('Password changed. You are signed out on other devices.'); }} />
+      </Modal>
       {open && <div className="scrim" onClick={() => setOpen(false)} />}
 
       <div className="main">
@@ -157,7 +166,7 @@ export function Layout() {
           </NavLink>
         </header>
         <main className="content">
-          <Suspense fallback={<Spinner />}><Outlet /></Suspense>
+          <ErrorBoundary key={loc.pathname}><Suspense fallback={<Spinner />}><Outlet /></Suspense></ErrorBoundary>
         </main>
         <nav className="bottom-nav only-mobile" aria-label="Quick navigation">
           {bottom.map((i) => (

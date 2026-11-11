@@ -253,12 +253,12 @@ async function main() {
       [9, 'Dairy Fresh (Vendor)', 'vendor@freshmakers.in', 'VENDOR', null, 1, []],
     ];
     const linked = new Set<number>();
-    await ins(c, 'users', ['id', 'name', 'email', 'password_hash', 'role', 'region_id', 'vendor_id', 'employee_id'],
+    await ins(c, 'users', ['id', 'name', 'email', 'username', 'password_hash', 'role', 'region_id', 'vendor_id', 'employee_id'],
       users.map((u) => {
         // site staff get a linked employee so "My attendance" works out of the box
         const emp = empSite.find((e) => u[6].includes(e.site) && !linked.has(e.id));
         if (emp) linked.add(emp.id);
-        return [u[0], u[1], u[2], hash, u[3], u[4], u[5], emp?.id ?? null];
+        return [u[0], u[1], u[2], u[2].split('@')[0], hash, u[3], u[4], u[5], emp?.id ?? null];
       }));
     await ins(c, 'user_sites', ['user_id', 'site_id'], users.flatMap((u) => u[6].map((s) => [u[0], s])));
     const BARISTA = 2, MANAGER = 3, SUPERVISOR = 4, OPS = 5, CBO = 6, SCM = 7, FIN = 8;

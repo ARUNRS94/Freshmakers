@@ -5,6 +5,7 @@ import { Badge, Card, ErrorBox, Icon, PageHeader, Spinner, Tabs, useToast } from
 import { Field, Input, Modal, Select } from '../components/Form';
 import { DataTable } from '../components/DataTable';
 import { useAuth } from '../lib/auth';
+import { CredentialsModal, type Credentials } from '../components/Credentials';
 
 type AccessMap = Record<string, { view: boolean; edit: boolean }>;
 interface Role { code: string; name: string; scope: string; built_in: boolean; user_count: number; access: AccessMap }
@@ -39,6 +40,19 @@ function UserList({ roles, onChanged }: { roles: Role[]; onChanged: () => void }
   const [busy, setBusy] = useState(false);
   const [chain, setChain] = useState<string[]>([]);
   const canEdit = allowed('users', 'edit');
+  const [creds, setCreds] = useState<Credentials | null>(null);
+
+  const resetPassword = async () => {
+    if (!confirm(`Reset the password for ${edit.name || 'this user'}? They will be signed out and given a one-time password.`)) return;
+    try {
+      const r = await api<{ login: string; password: string }>(`/users/${edit.id}/reset-password`, { body: {} });
+      setCreds({ name: edit.name, login: r.login, password: r.password });
+      setEdit(null);
+      reload();
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  };
   useEffect(() => {
     if (settings.data) setChain(settings.data.indent_approval_chain);
   }, [settings.data]);
@@ -51,7 +65,10 @@ function UserList({ roles, onChanged }: { roles: Role[]; onChanged: () => void }
     try {
       const body = { ...edit, site_ids: scopeOf(edit.role) === 'SITES' ? edit.site_ids : [] };
       if (edit.id) await api(`/users/${edit.id}`, { method: 'PUT', body });
-      else await api('/users', { body });
+      else {
+        const r = await api<{ id: number; password?: string }>('/users', { body });
+        if (r.password) setCreds({ name: edit.name || 'the new user', login: edit.username || edit.email, password: r.password });
+      }
       invalidateLookups();
       toast('User saved');
       setEdit(null);
@@ -73,7 +90,9 @@ function UserList({ roles, onChanged }: { roles: Role[]; onChanged: () => void }
     }
   };
 
-  const scopeText = (u: any) => (u.role_scope === 'SITES' ? `${u.site_ids.length} site(s)` : u.role_scope === 'REGION' ? (u.region_name ? `${u.region_name} region` : 'All regions') : u.vendor_name ?? 'All sites');
+  // site staff also see wherever their linked employee is deployed today
+  const sitesText = (u: any) => [u.site_ids.length ? `${u.site_ids.length} site(s)` : '', u.employee_id ? 'where deployed' : ''].filter(Boolean).join(' + ') || 'No sites';
+  const scopeText = (u: any) => (u.role_scope === 'SITES' ? sitesText(u) : u.role_scope === 'REGION' ? (u.region_name ? `${u.region_name} region` : 'All regions') : u.vendor_name ?? 'All sites');
   const sites = (lk?.sites ?? []).filter((s) => !siteFilter || s.name.toLowerCase().includes(siteFilter.toLowerCase()) || s.client_name.toLowerCase().includes(siteFilter.toLowerCase()));
   const editing = edit ? scopeOf(edit.role) : undefined;
   const self = edit?.id === user?.id;
@@ -81,10 +100,10 @@ function UserList({ roles, onChanged }: { roles: Role[]; onChanged: () => void }
 
   return (
     <>
-      <Card pad={false} title="Users" actions={canEdit && <button className="btn btn-sm" onClick={() => { setErr(''); setEdit({ name: '', email: '', role: 'BARISTA', password: '', site_ids: [], active: true, employee_id: '' }); }}><Icon name="plus" size={15} /> Add user</button>}>
-        <DataTable loading={loading} rows={data} exportName="users" onRowClick={canEdit ? (u) => { setErr(''); setEdit({ ...u, password: '', employee_id: u.employee_id ?? '' }); } : undefined} columns={[
+      <Card pad={false} title="Users" actions={canEdit && <button className="btn btn-sm" onClick={() => { setErr(''); setEdit({ name: '', username: '', email: '', role: 'BARISTA', password: '', site_ids: [], active: true, employee_id: '' }); }}><Icon name="plus" size={15} /> Add user</button>}>
+        <DataTable loading={loading} rows={data} exportName="users" onRowClick={canEdit ? (u) => { setErr(''); setEdit({ ...u, name: u.account_name, username: u.username ?? '', email: u.email ?? '', password: '', employee_id: u.employee_id ?? '' }); } : undefined} columns={[
           { key: 'name', label: 'Name', primary: true },
-          { key: 'email', label: 'Email' },
+          { key: 'login', label: 'Sign-in', value: (u) => u.username ?? u.email, render: (u) => <span>{u.username ?? u.email}{u.must_change_password && <span className="muted small"> · first sign-in pending</span>}</span> },
           { key: 'role_name', label: 'Role', render: (u) => <Badge tone="teal">{u.role_name}</Badge> },
           { key: 'scope', label: 'Can see', value: scopeText, render: scopeText },
           { key: 'employee_name', label: 'Employee', render: (u) => (u.employee_name ? <span>{u.employee_name} <span className="muted small">{u.employee_code}</span></span> : '—') },
@@ -105,17 +124,18 @@ function UserList({ roles, onChanged }: { roles: Role[]; onChanged: () => void }
       )}
 
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit?.id ? 'Edit user' : 'Add user'} wide
-        footer={<><button className="btn btn-ghost" onClick={() => setEdit(null)}>Cancel</button><button className="btn" disabled={busy} onClick={save}>Save</button></>}>
+        footer={<>{edit?.id && !self && <button className="btn btn-ghost" style={{ marginRight: 'auto' }} onClick={resetPassword}>Reset password</button>}<button className="btn btn-ghost" onClick={() => setEdit(null)}>Cancel</button><button className="btn" disabled={busy} onClick={save}>Save</button></>}>
         <ErrorBox>{err}</ErrorBox>
         {edit && (
           <>
             <div className="form-grid">
-              <Field label="Name" required><Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
-              <Field label="Email" required><Input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></Field>
+              <Field label="Name" required={!edit.employee_id} hint={edit.employee_id ? 'Shown as the linked employee’s name' : undefined}><Input value={edit.name ?? ''} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
+              <Field label="Username" hint="Letters, numbers, dot, dash or underscore"><Input autoCapitalize="none" spellCheck={false} value={edit.username} onChange={(e) => setEdit({ ...edit, username: e.target.value })} /></Field>
+              <Field label="Email" hint="Username or email is needed to sign in"><Input type="email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} /></Field>
               <Field label="Role" required hint={self ? 'You cannot change your own role' : undefined}>
                 <Select value={edit.role} disabled={self} onChange={(e) => setEdit({ ...edit, role: e.target.value })} options={assignable.map((r) => ({ value: r.code, label: r.name }))} />
               </Field>
-              <Field label={edit.id ? 'New password' : 'Password'} required={!edit.id} hint={edit.id ? 'Leave blank to keep current' : 'At least 6 characters'}>
+              <Field label={edit.id ? 'New password' : 'Password'} hint={edit.id ? 'Leave blank to keep current. Prefer Reset password.' : 'Leave blank to get a one-time password'}>
                 <Input type="password" autoComplete="new-password" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
               </Field>
               <Field label="Linked employee" hint="Lets this person use My attendance">
@@ -153,6 +173,7 @@ function UserList({ roles, onChanged }: { roles: Role[]; onChanged: () => void }
           </>
         )}
       </Modal>
+      <CredentialsModal creds={creds} onClose={() => setCreds(null)} />
     </>
   );
 }

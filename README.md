@@ -73,6 +73,9 @@ Production: `npm run build && npm start`. One Node process serves the API and th
 - *Setup → Users, roles & access* manages logins, custom roles and a View / Edit table per role. The server enforces the table on every request. Admin always has full access, and only an admin can change role access.
 - Built-in role codes still drive workflow (indent approval stages, SCM fulfilment). Custom roles get permissions and a data scope (all sites, region or assigned sites) but are not approval stages.
 - *Setup → Audit log* shows every create, update and delete with who, when, and before/after values. Database triggers record it, covering every table except the stock ledger (derived from audited documents) and document counters; the log itself cannot be edited.
+- **Giving staff a login:** in Employee master, press **Create login** on the employee. The username is their employee code and a one-time password is shown once; they choose their own password at first sign-in. Admins can also **Reset password** from Users. Changing a password signs the person out everywhere else, and making an employee inactive blocks their login.
+- Site staff automatically see the site their employee record is deployed at today, in addition to any sites assigned on their login.
+- One-tap demo logins appear only in local development. A public demo site can show them by setting `VITE_SHOW_DEMO_LOGINS=true` when building the client.
 - Upgrade an existing database with `npm --prefix server run db:migrate`. It only adds to the schema and keeps your data.
 
 

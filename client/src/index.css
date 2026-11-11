@@ -157,6 +157,13 @@ button { font: inherit; color: inherit; }
 
 .input { width: 100%; padding: .5rem .65rem; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font: inherit; font-size: .92rem; min-height: 40px; }
 .input:focus { outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent); border-color: var(--primary); }
+.combo { display: flex; flex-direction: column; min-width: 0; }
+/* in the page flow rather than floating, so dialogs that scroll never cut it off */
+.combo-list { list-style: none; margin: .3rem 0 0; padding: .25rem; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); box-shadow: var(--shadow); }
+.combo-list li { padding: .45rem .6rem; border-radius: 6px; cursor: pointer; font-size: .9rem; }
+.combo-list li.active { background: var(--primary-50); color: var(--primary); }
+.combo-list li[aria-selected='true'] { font-weight: 600; }
+.combo-list li[aria-disabled='true'] { cursor: default; background: none; }
 textarea.input { min-height: 70px; resize: vertical; }
 .field { display: flex; flex-direction: column; gap: .3rem; min-width: 0; }
 .field-label { font-size: .8rem; font-weight: 600; color: var(--muted); }

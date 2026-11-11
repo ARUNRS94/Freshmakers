@@ -75,6 +75,16 @@ export function useLookups() {
   return data;
 }
 
+/** Warns before the tab is closed or reloaded while entries are unsaved */
+export function useUnsavedWarning(dirty: boolean) {
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+}
+
 const SITE_KEY = 'fm_site';
 
 function storedSite() {

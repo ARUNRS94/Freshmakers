@@ -4,6 +4,7 @@ import { useAuth } from './lib/auth';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/ui';
 import Login from './pages/Login';
+import ChangePasswordPage from './pages/ChangePassword';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Alerts = lazy(() => import('./pages/Alerts'));
 const Stock = lazy(() => import('./pages/Stock'));
@@ -37,6 +38,7 @@ export default function App() {
   const { user, ready, allowed } = useAuth();
   if (!ready) return <Spinner label="Starting…" />;
   if (!user) return <Login />;
+  if (user.must_change_password) return <ChangePasswordPage />;
   const home = user.role === 'VENDOR' ? <Navigate to="/purchase-orders" replace /> : allowed('dashboard') ? <Dashboard /> : <Navigate to="/alerts" replace />;
   return (
     <Routes>

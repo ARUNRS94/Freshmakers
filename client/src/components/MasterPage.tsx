@@ -1,9 +1,13 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { invalidateLookups, useApi } from '../lib/hooks';
 import { Badge, Card, ErrorBox, Icon, useToast } from './ui';
 import { Field, Input, Modal } from './Form';
 import { DataTable, type Column } from './DataTable';
+import { SearchSelect } from './SearchSelect';
+
+/** longer lists than this get a type-to-search dropdown */
+const SEARCH_FROM = 10;
 
 export interface FieldDef {
   key: string;
@@ -27,11 +31,16 @@ interface Props {
   newLabel?: string;
   /** when false, rows can't be deactivated */
   deletable?: boolean;
+  /** bump to reload the list after a change made outside this component */
+  version?: number;
 }
 
-export function MasterPage({ endpoint, title, columns, fields, canEdit, query = '', toolbar, newLabel = 'Add', deletable = true }: Props) {
+export function MasterPage({ endpoint, title, columns, fields, canEdit, query = '', toolbar, newLabel = 'Add', deletable = true, version = 0 }: Props) {
   const toast = useToast();
   const { data, loading, reload } = useApi<any[]>(`${endpoint}${query}`);
+  useEffect(() => {
+    if (version) reload();
+  }, [version, reload]);
   const [edit, setEdit] = useState<Record<string, any> | null>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -92,7 +101,9 @@ export function MasterPage({ endpoint, title, columns, fields, canEdit, query = 
           <div className="form-grid">
             {fields.map((f) => (
               <Field key={f.key} label={f.label} required={f.required} hint={f.hint} className={f.span || f.type === 'textarea' ? 'span-all' : ''}>
-                {f.type === 'select' ? (
+                {f.type === 'select' && (f.options?.length ?? 0) > SEARCH_FROM ? (
+                  <SearchSelect value={edit[f.key]} options={f.options!} required={f.required} label={f.label} onChange={(v) => setEdit({ ...edit, [f.key]: v })} />
+                ) : f.type === 'select' ? (
                   <select className="input" value={edit[f.key] ?? ''} onChange={(e) => setEdit({ ...edit, [f.key]: e.target.value })}>
                     <option value="">—</option>
                     {f.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

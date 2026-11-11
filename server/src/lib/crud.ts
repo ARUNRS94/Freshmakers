@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { q, one, Where } from './db.js';
 import { need } from './auth.js';
 import type { ModuleKey } from './access.js';
@@ -19,6 +19,8 @@ export interface CrudConfig {
   module: ModuleKey;
   /** restrict list to user's sites using this column expression */
   siteColumn?: string;
+  /** extra checks before a create, update or delete; throw to refuse */
+  guard?: (req: Request, body: any, id?: string) => Promise<void>;
 }
 
 export function crudRouter(cfg: CrudConfig) {
@@ -63,6 +65,7 @@ export function crudRouter(cfg: CrudConfig) {
   };
 
   r.post('/', need(cfg.module), async (req, res) => {
+    await cfg.guard?.(req, req.body);
     const { cols, vals } = pick(req.body, false);
     const row = await one(
       `INSERT INTO ${cfg.table}(${cols.join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')}) RETURNING *`,
@@ -72,6 +75,7 @@ export function crudRouter(cfg: CrudConfig) {
   });
 
   r.put('/:id', need(cfg.module), async (req, res) => {
+    await cfg.guard?.(req, req.body, String(req.params.id));
     const { cols, vals } = pick(req.body, true);
     const row = await one(
       `UPDATE ${cfg.table} SET ${cols.map((c, i) => `${c}=$${i + 1}`).join(',')} WHERE id=$${cols.length + 1} RETURNING *`,
@@ -82,6 +86,7 @@ export function crudRouter(cfg: CrudConfig) {
   });
 
   r.delete('/:id', need(cfg.module), async (req, res) => {
+    await cfg.guard?.(req, {}, String(req.params.id));
     // soft delete where an active flag exists, otherwise hard delete
     const hasActive = await one(
       `SELECT 1 FROM information_schema.columns WHERE table_name=$1 AND column_name='active'`,

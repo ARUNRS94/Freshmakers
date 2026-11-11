@@ -4,6 +4,8 @@ import { Field, Input } from '../components/Form';
 import { ErrorBox } from '../components/ui';
 
 const DEMO = ['barista', 'manager', 'supervisor', 'opshead', 'cbo', 'scm', 'finance', 'vendor', 'admin'];
+// one-tap demo logins are for local development; a public demo site can opt in with VITE_SHOW_DEMO_LOGINS=true
+const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGINS === 'true';
 
 export default function Login() {
   const { login } = useAuth();
@@ -38,7 +40,7 @@ export default function Login() {
             <li>Vendor payables, customer receivables, attendance and deployment</li>
           </ul>
         </div>
-        <span style={{ opacity: 0.7, fontSize: '.85rem' }}>46 customers · 168 sites · 5 regions</span>
+        <span style={{ opacity: 0.7, fontSize: '.85rem' }}>Inventory, indents, supply, finance and people in one place</span>
       </div>
       <div className="login-panel">
         <form className="login-card card card-body" onSubmit={submit}>
@@ -47,14 +49,14 @@ export default function Login() {
             <p className="muted">Use your Freshmakers account</p>
           </div>
           <ErrorBox>{err}</ErrorBox>
-          <Field label="Email">
-            <Input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@freshmakers.in" />
+          <Field label="Username or email">
+            <Input type="text" autoComplete="username" autoCapitalize="none" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. emp0042" />
           </Field>
           <Field label="Password">
             <Input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
           <button className="btn" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-          <div className="stack" style={{ gap: '.4rem' }}>
+          {SHOW_DEMO && <div className="stack" style={{ gap: '.4rem' }}>
             <span className="muted small">Demo accounts (password Fresh@123) — tap to sign in:</span>
             <div className="demo-users">
               {DEMO.map((d) => (
@@ -63,7 +65,8 @@ export default function Login() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
+          {!SHOW_DEMO && <p className="muted small">No login yet? Ask your manager or admin to create one for you.</p>}
         </form>
       </div>
     </div>

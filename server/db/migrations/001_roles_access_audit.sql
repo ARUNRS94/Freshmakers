@@ -99,12 +99,12 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS fm_audit_locked ON audit_log;
 CREATE TRIGGER fm_audit_locked BEFORE UPDATE OR DELETE ON audit_log FOR EACH ROW EXECUTE FUNCTION fm_audit_locked();
 
--- every table except the log itself, document counters, and the stock ledger (derived from the audited documents)
+-- every table except the log itself, document counters, login attempt counters, and the stock ledger (derived from the audited documents)
 DO $$
 DECLARE t TEXT;
 BEGIN
   FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public'
-           AND tablename NOT IN ('audit_log', 'doc_sequences', 'stock_ledger') LOOP
+           AND tablename NOT IN ('audit_log', 'doc_sequences', 'stock_ledger', 'login_attempts') LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS fm_audit ON %I', t);
     EXECUTE format('CREATE TRIGGER fm_audit AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION fm_audit()', t);
   END LOOP;

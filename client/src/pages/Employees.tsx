@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { useLookups, useQueryState, useApi } from '../lib/hooks';
+import { CredentialsModal, type Credentials } from '../components/Credentials';
+import { api } from '../lib/api';
 import { fmtDate, money } from '../lib/format';
-import { Card, PageHeader, Tabs } from '../components/ui';
+import { Badge, Card, PageHeader, Tabs, useToast } from '../components/ui';
 import { MasterPage } from '../components/MasterPage';
 import { DataTable } from '../components/DataTable';
 import { useAuth } from '../lib/auth';
@@ -10,7 +13,8 @@ export default function Employees() {
   const [f, set] = useQueryState({ tab: 'staff' });
   const lk = useLookups();
   const { allowed } = useAuth();
-  const sites = (lk?.sites ?? []).map((s) => ({ value: s.id, label: s.name }));
+  // the customer name too, so a site can be found by either
+  const sites = (lk?.sites ?? []).map((s) => ({ value: s.id, label: `${s.name} (${s.client_name})` }));
   const emps = (lk?.employees ?? []).map((e) => ({ value: e.id, label: `${e.name} (${e.code})` }));
   return (
     <>
@@ -39,20 +43,41 @@ export default function Employees() {
 
 export function EmployeeMaster() {
   const { allowed } = useAuth();
+  const toast = useToast();
+  const [creds, setCreds] = useState<Credentials | null>(null);
+  const [version, setVersion] = useState(0);
+  const canCreateLogin = allowed('users', 'edit');
+
+  const createLogin = async (r: any) => {
+    try {
+      const res = await api<{ login: string; password: string }>(`/employees/${r.id}/login`, { body: {} });
+      setCreds({ name: r.name, login: res.login, password: res.password });
+      setVersion((v) => v + 1);
+    } catch (e: any) {
+      toast(e.message, 'err');
+    }
+  };
+
   return (
-    <MasterPage endpoint="/employees" title="Employees" canEdit={allowed('employees', 'edit')} newLabel="Add employee"
+    <>
+    <MasterPage endpoint="/employees" title="Employees" canEdit={allowed('employees', 'edit')} newLabel="Add employee" version={version}
       columns={[
         { key: 'name', label: 'Employee', primary: true, render: (r) => <span>{r.name} <span className="muted small">{r.code}</span></span> },
         { key: 'designation', label: 'Designation' }, { key: 'phone', label: 'Phone' },
         { key: 'current_site_name', label: 'Deployed at', render: (r) => r.current_site_name ? <span>{r.current_site_name} <span className="muted small">{r.current_shift}</span></span> : <span className="text-warn">Not deployed</span> },
         { key: 'daily_wage', label: 'Daily wage', align: 'right', hideMobile: true, render: (r) => (r.daily_wage ? money(r.daily_wage) : '—') },
+        { key: 'login_name', label: 'Login', value: (r) => r.login_name ?? '', render: (r) => r.login_name
+          ? <span>{r.login_name} {r.login_active === false ? <Badge tone="gray">Disabled</Badge> : r.login_pending ? <span className="muted small">· first sign-in pending</span> : null}</span>
+          : canCreateLogin && r.active ? <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); createLogin(r); }}>Create login</button> : <span className="muted">—</span> },
       ]}
       fields={[
         { key: 'code', label: 'Employee code', required: true }, { key: 'name', label: 'Name', required: true },
         { key: 'designation', label: 'Designation', type: 'select', defaultValue: 'Barista', options: ['Barista', 'Senior Barista', 'Barista (Reliever)', 'Site Manager', 'Supervisor', 'Ops Head', 'Helper'].map((d) => ({ value: d, label: d })) },
         { key: 'phone', label: 'Phone' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'joining_date', label: 'Joining date', type: 'date' },
-        { key: 'daily_wage', label: 'Daily wage (₹)', type: 'number' }, { key: 'active', label: 'Active', type: 'checkbox' },
+        { key: 'daily_wage', label: 'Daily wage (₹)', type: 'number' }, { key: 'active', label: 'Active', type: 'checkbox', hint: 'Making an employee inactive also blocks their login' },
       ]} />
+    <CredentialsModal creds={creds} onClose={() => setCreds(null)} />
+    </>
   );
 }
 

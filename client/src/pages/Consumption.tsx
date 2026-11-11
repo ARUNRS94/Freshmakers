@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, qs } from '../lib/api';
-import { useApi, useQueryState, useSite } from '../lib/hooks';
+import { useApi, useQueryState, useSite, useUnsavedWarning } from '../lib/hooks';
 import { addDays, fmtDate, num, qty, today } from '../lib/format';
 import { Card, ErrorBox, PageHeader, Spinner, Tabs, useToast } from '../components/ui';
 import { DataTable } from '../components/DataTable';
@@ -55,6 +55,7 @@ function Entry({ f, set }: { f: Record<string, string>; set: (p: Record<string, 
     return v && (v.u !== usedText(l) || v.w !== wastedText(l));
   });
 
+  useUnsavedWarning(!!dirty);
   const update = (id: number, change: Partial<Value>) => setVals((all) => ({ ...all, [id]: { ...(all[id] ?? { u: '', w: '', r: '' }), ...change } }));
 
   const copyPreviousDay = async () => {

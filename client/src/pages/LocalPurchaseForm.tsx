@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { useLookups, useSite } from '../lib/hooks';
+import { useLookups, useSite, useUnsavedWarning } from '../lib/hooks';
 import { addDays, money, today } from '../lib/format';
 import { Card, ErrorBox, PageHeader, useToast } from '../components/ui';
 import { Field, Input, Select } from '../components/Form';
@@ -69,6 +69,7 @@ export default function LocalPurchaseForm() {
   };
 
   const picked = validLines(lines);
+  useUnsavedWarning(picked.length > 0 && !busy);
   const total = picked.reduce((a, l) => a + Number(l.qty) * Number(l.rate || 0), 0);
   const yesterday = addDays(today(), -1);
 

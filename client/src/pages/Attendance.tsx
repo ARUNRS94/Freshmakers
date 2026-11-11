@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, qs } from '../lib/api';
-import { useApi, useQueryState, useSite } from '../lib/hooks';
+import { useApi, useQueryState, useSite, useUnsavedWarning } from '../lib/hooks';
 import { addDays, ATT_LABEL, fmtDate, money, num, today } from '../lib/format';
 import { Card, ErrorBox, PageHeader, Spinner, Tabs, useToast } from '../components/ui';
 import { DataTable } from '../components/DataTable';
@@ -47,6 +47,7 @@ function Mark({ f, set }: P) {
   const shown = staff.filter((e) => !term || `${e.name} ${e.code}`.toLowerCase().includes(term.toLowerCase()));
   const marked = staff.filter((e) => vals[e.employee_id]?.s).length;
   const dirty = staff.some((e) => JSON.stringify(vals[e.employee_id]) !== JSON.stringify(fromRow(e)));
+  useUnsavedWarning(dirty);
   const update = (id: number, change: Partial<Value>) => setVals((all) => ({ ...all, [id]: { ...(all[id] ?? { s: '', i: '', o: '' }), ...change } }));
 
   const markAllPresent = () => setVals((all) => Object.fromEntries(staff.map((e) => {

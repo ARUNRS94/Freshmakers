@@ -27,21 +27,27 @@ app.get('/api/health', async (_req, res) => {
   res.json({ ok: true });
 });
 
-// naive in-memory login throttle
-const attempts = new Map<string, { n: number; at: number }>();
+const MAX_FAILURES = 8;
+
+// counted in the database so the limit holds when several server instances run (as on Vercel)
 app.post('/api/auth/login', async (req, res) => {
-  const email = String(req.body?.email ?? '').toLowerCase().trim();
+  const login = String(req.body?.login ?? req.body?.email ?? '').toLowerCase().trim();
   const password = String(req.body?.password ?? '');
-  if (!email || !password) throw bad('Email and password are required');
-  const a = attempts.get(email);
-  if (a && a.n >= 8 && Date.now() - a.at < 10 * 60e3) throw new HttpError(429, 'Too many attempts, try again in 10 minutes');
-  const u = await one<any>('SELECT id, password_hash, active FROM users WHERE email=$1', [email]);
-  if (!u || !u.active || !(await bcrypt.compare(password, u.password_hash))) {
-    attempts.set(email, { n: (a && Date.now() - a.at < 10 * 60e3 ? a.n : 0) + 1, at: Date.now() });
-    throw new HttpError(401, 'Invalid email or password');
+  if (!login || !password) throw bad('Username and password are required');
+  const att = await one<{ failures: number; recent: boolean }>(
+    `SELECT failures, first_at > now() - INTERVAL '10 minutes' recent FROM login_attempts WHERE key=$1`, [login]);
+  if (att?.recent && att.failures >= MAX_FAILURES) throw new HttpError(429, 'Too many attempts, try again in 10 minutes');
+  const u = await one<any>('SELECT id, password_hash FROM users WHERE lower(email)=$1 OR lower(username)=$1 LIMIT 1', [login]);
+  const user = u && (await bcrypt.compare(password, u.password_hash)) ? await loadUser(u.id) : undefined;
+  if (!user) {
+    await q(`INSERT INTO login_attempts(key, failures, first_at) VALUES ($1, 1, now())
+             ON CONFLICT (key) DO UPDATE SET
+               failures = CASE WHEN login_attempts.first_at > now() - INTERVAL '10 minutes' THEN login_attempts.failures + 1 ELSE 1 END,
+               first_at = CASE WHEN login_attempts.first_at > now() - INTERVAL '10 minutes' THEN login_attempts.first_at ELSE now() END`, [login]);
+    throw new HttpError(401, 'Invalid username or password');
   }
-  attempts.delete(email);
-  res.json({ token: signToken(u.id), user: await loadUser(u.id) });
+  await q('DELETE FROM login_attempts WHERE key=$1', [login]);
+  res.json({ token: signToken(user.id, user.session_version), user });
 });
 
 app.use('/api', authenticate);
@@ -50,9 +56,13 @@ app.post('/api/auth/change-password', async (req, res) => {
   const { current, next } = req.body ?? {};
   const u = await one<any>('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
   if (!(await bcrypt.compare(String(current ?? ''), u.password_hash))) throw bad('Current password is incorrect');
-  if (String(next ?? '').length < 6) throw bad('New password must be at least 6 characters');
-  await q('UPDATE users SET password_hash=$2 WHERE id=$1', [req.user.id, await bcrypt.hash(String(next), 10)]);
-  res.json({ ok: true });
+  if (String(next ?? '').length < 8) throw bad('New password must be at least 8 characters');
+  if (String(next) === String(current)) throw bad('Choose a password different from the current one');
+  // a new session version ends every other session; this one gets a fresh token under it
+  const row = await one<{ session_version: number }>(
+    'UPDATE users SET password_hash=$2, must_change_password=FALSE, session_version=session_version+1 WHERE id=$1 RETURNING session_version',
+    [req.user.id, await bcrypt.hash(String(next), 10)]);
+  res.json({ token: signToken(req.user.id, row!.session_version), user: await loadUser(req.user.id) });
 });
 
 app.use('/api', viewGate);

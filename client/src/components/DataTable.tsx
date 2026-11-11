@@ -44,7 +44,9 @@ export function DataTable<T extends Record<string, any>>({
     let list = rows ?? [];
     if (term) {
       const t = term.toLowerCase();
-      list = list.filter((r) => columns.some((c) => String(val(c, r) ?? '').toLowerCase().includes(t)));
+      // also the record's own text fields, so a code shown beside a name (e.g. EMP0042, CL001) is searchable
+      list = list.filter((r) => columns.some((c) => String(val(c, r) ?? '').toLowerCase().includes(t))
+        || Object.values(r).some((v) => typeof v === 'string' && v.toLowerCase().includes(t)));
     }
     if (sort) {
       const c = columns.find((x) => x.key === sort.key)!;

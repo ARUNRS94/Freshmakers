@@ -15,6 +15,10 @@ export interface AuthUser {
   email: string;
   role: Role;
   role_name: string;
+  username: string | null;
+  /** a temporary password must be replaced before anything else */
+  must_change_password: boolean;
+  session_version: number;
   region_id: number | null;
   vendor_id: number | null;
   employee_id: number | null;
@@ -32,18 +36,26 @@ declare global {
 }
 
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-export const signToken = (userId: number) => jwt.sign({ uid: userId }, SECRET, { expiresIn: '12h' });
+/** The token carries the session version it was issued under, so a password change can end it */
+export const signToken = (userId: number, version: number) => jwt.sign({ uid: userId, v: version }, SECRET, { expiresIn: '12h' });
 
 export async function loadUser(id: number): Promise<AuthUser | undefined> {
   const u = await one<any>(
-    `SELECT u.id,u.name,u.email,u.role,u.region_id,u.vendor_id,u.employee_id,u.active,r.name role_name,r.scope
-     FROM users u JOIN roles r ON r.code=u.role WHERE u.id=$1`,
+    // a linked login goes by the employee's name, so people see who they are, not "Barista – Demo"
+    `SELECT u.id, COALESCE(e.name, u.name) name, u.email, u.username, u.role, u.region_id, u.vendor_id, u.employee_id, u.active,
+            u.must_change_password, u.session_version, e.active employee_active, r.name role_name, r.scope
+     FROM users u JOIN roles r ON r.code=u.role LEFT JOIN employees e ON e.id=u.employee_id WHERE u.id=$1`,
     [id],
   );
-  if (!u || !u.active) return undefined;
+  // leaving the company (employee made inactive) ends their access too
+  if (!u || !u.active || u.employee_active === false) return undefined;
   let siteIds: number[] | null = null;
   if (u.scope === 'SITES') {
-    siteIds = (await q<{ site_id: number }>('SELECT site_id FROM user_sites WHERE user_id=$1', [id])).map((r) => r.site_id);
+    // assigned sites plus wherever their linked employee is deployed today, so a move follows the person
+    siteIds = (await q<{ site_id: number }>(
+      `SELECT site_id FROM user_sites WHERE user_id=$1
+       UNION SELECT d.site_id FROM deployments d WHERE d.employee_id=$2 AND d.from_date<=CURRENT_DATE AND (d.to_date IS NULL OR d.to_date>=CURRENT_DATE)`,
+      [id, u.employee_id])).map((r) => r.site_id);
   } else if (u.scope === 'REGION' && u.region_id) {
     siteIds = (await q<{ id: number }>('SELECT id FROM sites WHERE region_id=$1', [u.region_id])).map((r) => r.id);
   } else if (u.scope === 'VENDOR') {
@@ -58,20 +70,28 @@ export async function loadUser(id: number): Promise<AuthUser | undefined> {
   }
   delete u.active;
   delete u.scope;
+  delete u.employee_active;
   return { ...u, siteIds, access };
 }
+
+/** All someone with a temporary password can do */
+const PASSWORD_PATHS = ['/auth/me', '/auth/change-password'];
 
 export async function authenticate(req: Request, _res: Response, next: NextFunction) {
   const h = req.headers.authorization;
   if (!h?.startsWith('Bearer ')) return next(new HttpError(401, 'Not signed in'));
-  let user: AuthUser | undefined;
+  let payload: { uid: number; v?: number };
   try {
-    const payload = jwt.verify(h.slice(7), SECRET) as { uid: number };
-    user = await loadUser(payload.uid);
+    payload = jwt.verify(h.slice(7), SECRET) as { uid: number; v?: number };
   } catch {
     return next(new HttpError(401, 'Session expired, please sign in again'));
   }
+  const user = await loadUser(payload.uid);
   if (!user) return next(new HttpError(401, 'Account disabled or missing'));
+  if ((payload.v ?? 0) !== user.session_version)
+    return next(new HttpError(401, 'Your password was changed. Please sign in again.'));
+  if (user.must_change_password && !PASSWORD_PATHS.includes(req.path))
+    return next(new HttpError(403, 'Choose a new password to continue'));
   req.user = user;
   actor.run({ userId: user.id }, next);
 }

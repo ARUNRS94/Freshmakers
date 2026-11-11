@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, qs } from '../lib/api';
-import { useSite } from '../lib/hooks';
+import { useSite, useUnsavedWarning } from '../lib/hooks';
 import { addDays, today } from '../lib/format';
 import { Card, ErrorBox, PageHeader, useToast } from '../components/ui';
 import { Field, Input } from '../components/Form';
@@ -77,6 +77,7 @@ export default function IndentForm() {
   };
 
   const count = validLines(lines).length;
+  useUnsavedWarning(count > 0 && !busy);
   return (
     <>
       <PageHeader title={id ? 'Edit indent' : 'New indent'} subtitle="Enter what the site needs. Tap Add to accept a suggested quantity." back="/indents" />
