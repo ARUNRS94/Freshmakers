@@ -26,9 +26,13 @@ export function Select({ options, placeholder, ...props }: SelectHTMLAttributes<
 
 export function Modal({ open, onClose, title, children, footer, wide }: { open: boolean; onClose: () => void; title: ReactNode; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // callers pass a new onClose on every render; reading it through a ref keeps the effect
+  // below tied to opening only, so typing never re-runs it and pulls focus to the first field
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && closeRef.current();
     window.addEventListener('keydown', h);
     document.body.style.overflow = 'hidden';
     ref.current?.querySelector<HTMLElement>('input,select,textarea')?.focus();
@@ -36,7 +40,7 @@ export function Modal({ open, onClose, title, children, footer, wide }: { open: 
       window.removeEventListener('keydown', h);
       document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

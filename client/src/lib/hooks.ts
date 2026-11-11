@@ -38,17 +38,38 @@ export interface Lookups {
 }
 
 let lookupCache: Promise<Lookups> | null = null;
+/** dropdowns currently on screen, so a change can refresh them in place */
+const lookupListeners = new Set<(d: Lookups) => void>();
+
+function loadLookups() {
+  const p = api<Lookups>('/lookups');
+  lookupCache = p;
+  p.then((d) => {
+    if (lookupCache === p) lookupListeners.forEach((l) => l(d)); // an older, slower load must not win
+  }).catch(() => {
+    if (lookupCache === p) lookupCache = null;
+  });
+  return p;
+}
+
+/** Call after adding or changing a record that appears in dropdowns */
 export function invalidateLookups() {
   lookupCache = null;
+  if (lookupListeners.size) loadLookups();
 }
+
+/** Lookups belong to the signed-in user (their sites), so they must not outlive a sign-out */
+export function clearLookups() {
+  lookupCache = null;
+}
+
 export function useLookups() {
   const [data, setData] = useState<Lookups | null>(null);
   useEffect(() => {
-    if (!lookupCache) lookupCache = api<Lookups>('/lookups');
-    let alive = true;
-    lookupCache.then((d) => alive && setData(d)).catch(() => (lookupCache = null));
+    lookupListeners.add(setData);
+    (lookupCache ?? loadLookups()).then(setData).catch(() => {});
     return () => {
-      alive = false;
+      lookupListeners.delete(setData);
     };
   }, []);
   return data;

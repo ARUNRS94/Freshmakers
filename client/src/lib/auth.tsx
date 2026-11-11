@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, tokenStore } from './api';
+import { clearLookups } from './hooks';
 
 export type Level = 'view' | 'edit';
 export interface User {
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     tokenStore.set(null);
+    clearLookups();
     setUser(null);
   }, []);
 
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const r = await api<{ token: string; user: User }>('/auth/login', { body: { email, password } });
     tokenStore.set(r.token);
+    clearLookups();
     setUser(r.user);
   };
 
